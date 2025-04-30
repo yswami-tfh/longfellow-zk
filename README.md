@@ -7,8 +7,8 @@
 
 The Longfellow library enables the construction of  zero-knowledge protocols concerning legacy identity verification standards such as the ISO MDOC standard, the JWT standard, and W3 Verifiable Credentials.  This implementation is described in:
 
-* **Anonymous credentials from ECDSA** ([\https://eprint.iacr.org/2024/2010](https://eprint.iacr.org/2024/2010))
-* **libzk: A C++ Library for Zero-Knowledge Proofs** ([\https://datatracker.ietf.org/doc/draft-google-cfrg-libzk/](https://datatracker.ietf.org/doc/draft-google-cfrg-libzk/))
+* [Anonymous credentials from ECDSA](https://eprint.iacr.org/2024/2010)
+* [libzk: A C++ Library for Zero-Knowledge Proofs](https://datatracker.ietf.org/doc/draft-google-cfrg-libzk/)
 
 It is named after the bridge outside the Google Cambridge office.
 
