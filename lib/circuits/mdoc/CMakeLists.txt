@@ -12,12 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-find_package(zstd REQUIRED)
-
-include_directories(${Zstd_INCLUDE_DIRS})
-
 add_library(mdoc mdoc_zk.cc zk_spec.cc)
-target_link_libraries(mdoc flatsha ec algebra util)
+target_link_libraries(mdoc flatsha ec algebra util zstd)
 
 add_library(mdoc_static STATIC
     $<TARGET_OBJECTS:mdoc>

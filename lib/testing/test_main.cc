@@ -39,15 +39,17 @@ int main(int argc, char **argv) {
   // as this confuses gtest_discover_tests().
   if (!gtest_discover) {
     // By default run no benchmarks
-    benchmark::SetBenchmarkFilter("none");
     benchmark::Initialize(&argc, argv);
+    auto bf = benchmark::GetBenchmarkFilter();
 
-    size_t matches = benchmark::RunSpecifiedBenchmarks();
-    benchmark::Shutdown();
+    if (bf != "") {
+      size_t matches = benchmark::RunSpecifiedBenchmarks();
+      benchmark::Shutdown();
 
-    if (matches > 0) {
-      // run benchmarks only and not tests
-      return 0;
+      if (matches > 0) {
+        // run benchmarks only and not tests
+        return 0;
+      }
     }
   }
 

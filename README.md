@@ -19,7 +19,13 @@ It is named after the bridge outside the Google Cambridge office.
 This package depends on cmake, openssl, zstd, clang, googletest and
 googlebenchmark.
 
+### Ubuntu, debian
+
 `$ sudo apt install libssl-dev libzstd-dev libgtest-dev libbenchmark-dev zlib1g-dev`
+
+### Fedora, redhat
+`$ yum install -y clang libzstd-devel openssl-devel git cmake google-benchmark-devel gtest-devel`
+
 
 ## Building manually
 
