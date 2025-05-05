@@ -89,7 +89,7 @@ class ZKTest : public testing::Test {
     pubfill.push_back(p256_base.to_montgomery(e_));
   }
 
-  static void SetUpTestSuite() {
+  static void SetUpTestCase() {
     if (circuit1_ == nullptr) {
       using CompilerBackend = CompilerBackend<Fp256Base>;
       using LogicCircuit = Logic<Fp256Base, CompilerBackend>;
@@ -110,7 +110,7 @@ class ZKTest : public testing::Test {
     }
   }
 
-  static void TearDownTestSuite() {
+  static void TearDownTestCase() {
     if (circuit1_ != nullptr) {
       delete circuit1_;
       circuit1_ = nullptr;
@@ -173,14 +173,19 @@ TEST_F(ZKTest, elt_out_of_range) {
 
   // Selectively create bad elts at these indices and assert the parse fails.
   size_t bad_elts[] = {
-      1 * 32,        13 * 32,       /* bad elts in sumcheck transcript */
-      451 * 32,      456 * 32,      /* bad elts in com proof, block */
-      1133 * 32,      1134 * 32,    /* bad elts in com proof, dblock */
-      2496 * 32,      2497 * 32,    /* bad elts in com proof, r */
-      2685 * 32,      2686 * 32,    /* bad elts in com proof, d-b */
-      (3366 + 189) * 32 + 4,        /* bad elt in first run */
-      (3366 + 189 + 1) * 32 + 8,    /* bad elt in second run */
-    };
+      1 * 32,
+      13 * 32, /* bad elts in sumcheck transcript */
+      451 * 32,
+      456 * 32, /* bad elts in com proof, block */
+      1133 * 32,
+      1134 * 32, /* bad elts in com proof, dblock */
+      2496 * 32,
+      2497 * 32, /* bad elts in com proof, r */
+      2685 * 32,
+      2686 * 32,                 /* bad elts in com proof, d-b */
+      (3366 + 189) * 32 + 4,     /* bad elt in first run */
+      (3366 + 189 + 1) * 32 + 8, /* bad elt in second run */
+  };
   for (size_t bi = 0; bi < sizeof(bad_elts) / sizeof(size_t); ++bi) {
     for (size_t i = 0; i < 32; ++i) {
       buf[bad_elts[bi] + i] = 0xff;

@@ -28,29 +28,22 @@
 #include <string.h>
 
 int main(int argc, char **argv) {
-  // Before InitGoogleTest(), check whether we are in
-  // cmake's gtest_discover_tests().  Must do this first
-  // because InitGoogleTest() consumes the argv[] entry.
-  bool gtest_discover = (argc == 2) && !strcmp(argv[1], "--gtest_list_tests");
+  ::testing::InitGoogleTest(&argc, argv);
+    
+  // Hack: run benchmarks only if --benchmark_filter is
+  // specified explicitly.
 
-  testing::InitGoogleTest(&argc, argv);
+  // By default, the benchmark filter is set to *, which runs all
+  // benchmarks.  We don't want to run benchmarks when testing.  In
+  // recent versions of libbenchmark, one can call
+  // GetBenchmarkFilter(), but older versions don't support it.
+  // Check for anything that starts with --bench.
+  bool bench = (argc > 1) && !strncmp(argv[1], "--bench", 7);
 
-  // Do not attempt to run benchmarks with --gtest_list_tests,
-  // as this confuses gtest_discover_tests().
-  if (!gtest_discover) {
+  if (bench) {
     // By default run no benchmarks
     benchmark::Initialize(&argc, argv);
-    auto bf = benchmark::GetBenchmarkFilter();
-
-    if (bf != "") {
-      size_t matches = benchmark::RunSpecifiedBenchmarks();
-      benchmark::Shutdown();
-
-      if (matches > 0) {
-        // run benchmarks only and not tests
-        return 0;
-      }
-    }
+    return benchmark::RunSpecifiedBenchmarks();
   }
 
   return RUN_ALL_TESTS();

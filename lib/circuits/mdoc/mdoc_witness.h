@@ -412,7 +412,7 @@ class MdocSignatureWitness {
   using Elt = typename Field::Elt;
   using Nat = typename Field::N;
   using EcdsaWitness = VerifyWitness3<EC, ScalarField>;
-  using MacWitness = MacWitness<Field>;
+  using MacWitnessF = MacWitness<Field>;
   using f_128 = GF2_128<>;
   const EC& ec_;
   const f_128& gf_;
@@ -421,7 +421,7 @@ class MdocSignatureWitness {
   Elt e_, e2_;      /* Issuer signature values. */
   Elt dpkx_, dpky_; /* device key */
   EcdsaWitness ew_, dkw_;
-  MacWitness macs_[3]; /* macs for e_, dpkx_, dpky_ */
+  MacWitnessF macs_[3]; /* macs for e_, dpkx_, dpky_ */
 
   explicit MdocSignatureWitness(const EC& ec, const ScalarField& Fn,
                                 const f_128& gf)
@@ -429,8 +429,8 @@ class MdocSignatureWitness {
         gf_(gf),
         ew_(Fn, ec),
         dkw_(Fn, ec),
-        macs_{MacWitness(ec.f_, gf_), MacWitness(ec.f_, gf_),
-              MacWitness(ec.f_, gf_)} {}
+        macs_{MacWitnessF(ec.f_, gf_), MacWitnessF(ec.f_, gf_),
+              MacWitnessF(ec.f_, gf_)} {}
 
   void fill_witness(DenseFiller<Field>& filler) const {
     filler.push_back(e_);

@@ -56,7 +56,7 @@ void one_test_eqs_bind(size_t logn, corner_t n) {
 
   Elt rhs = F.zero();
   for (corner_t i = 0; i < n; i++) {
-    F.add(rhs, F.mulf(EQ.at(i, F), V.v_[i]));
+    F.add(rhs, F.mulf(EQ.at(i), V.v_[i]));
   }
 
   V.bind_all(logn, T.r_.data(), F);
@@ -74,7 +74,7 @@ void one_test_eqs_decomposition(size_t logn, corner_t n) {
 
   Elt rhs = F.zero();
   for (corner_t i = 0; i < n; i++) {
-    F.add(rhs, F.mulf(EQA.at(i, F), EQB.at(i, F)));
+    F.add(rhs, F.mulf(EQA.at(i), EQB.at(i)));
   }
 
   Elt lhs = Eq<Field>::eval(logn, n, A.r_.data(), B.r_.data(), F);
@@ -114,14 +114,14 @@ TEST(Eqs, RFC) {
   auto RFC = bindeq(logn, X.r_.data());
   Eqs<Field> EQ(logn, n, X.r_.data(), F);
   for (size_t i = 0; i < n; ++i) {
-    EXPECT_EQ(RFC[i], EQ.at(i, F));
+    EXPECT_EQ(RFC[i], EQ.at(i));
   }
 
   // truncating N truncates bindv(EQ, .) with no other ill effects
   size_t n2 = n - 7;
   Eqs<Field> EQ2(logn, n2, X.r_.data(), F);
   for (size_t i = 0; i < n2; ++i) {
-    EXPECT_EQ(RFC[i], EQ2.at(i, F));
+    EXPECT_EQ(RFC[i], EQ2.at(i));
   }
 }
 }  // namespace

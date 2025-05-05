@@ -49,24 +49,24 @@ namespace proofs {
 template <class Field>
 class CborTesting {
   using EvalBackend = EvaluationBackend<Field>;
-  using Logic = Logic<Field, EvalBackend>;
-  using EltW = typename Logic::EltW;
-  using BitW = typename Logic::BitW;
-  using Cbor = Cbor<Logic>;
-  using CborWitness = CborWitness<Field>;
+  using LogicF = Logic<Field, EvalBackend>;
+  using EltW = typename LogicF::EltW;
+  using BitW = typename LogicF::BitW;
+  using CborL = Cbor<LogicF>;
+  using CborWitnessF = CborWitness<Field>;
 
  public:
   explicit CborTesting(const Field &F) : f_(F) {}
 
   void convert_witnesses(
-      size_t n, typename Cbor::v8 in[/*n*/],
-      typename Cbor::position_witness pw[/*n*/],
-      typename Cbor::global_witness &gw,
-      const typename CborWitness::v8 inS[/*n*/],
-      const typename CborWitness::position_witness pwS[/*n*/],
-      const typename CborWitness::global_witness &gwS) const {
+      size_t n, typename CborL::v8 in[/*n*/],
+      typename CborL::position_witness pw[/*n*/],
+      typename CborL::global_witness &gw,
+      const typename CborWitnessF::v8 inS[/*n*/],
+      const typename CborWitnessF::position_witness pwS[/*n*/],
+      const typename CborWitnessF::global_witness &gwS) const {
     const EvalBackend ebk(f_);
-    const Logic L(&ebk, f_);
+    const LogicF L(&ebk, f_);
 
     for (size_t i = 0; i < n; ++i) {
       for (size_t j = 0; j < 8; ++j) {
@@ -82,9 +82,9 @@ class CborTesting {
 
   // Return an index that can be fed to a circuit in the
   // evaluation backend (i.e., a bit vector).
-  typename Cbor::vindex index(size_t j) const {
+  typename CborL::vindex index(size_t j) const {
     const EvalBackend ebk(f_);
-    const Logic L(&ebk, f_);
+    const LogicF L(&ebk, f_);
     return L.template vbit<CborConstants::kIndexBits>(j);
   }
 

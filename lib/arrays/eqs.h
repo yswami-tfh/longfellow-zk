@@ -20,7 +20,6 @@
 #include <vector>
 
 #include "algebra/blas.h"
-#include "algebra/poly.h"
 #include "arrays/affine.h"
 #include "arrays/dense.h"
 #include "util/panic.h"
@@ -30,29 +29,18 @@ namespace proofs {
 // Stateful implementation of EQ[I, j] which, for fixed
 // I, holds an array indexed by j.
 template <class Field>
-class Eqs {
+class Eqs : public Dense<Field> {
   using Elt = typename Field::Elt;
-  using T2 = Poly<2, Field>;
+  using Dense<Field>::v_;
+  using Dense<Field>::n0_;
 
  public:
   Eqs(size_t logn, corner_t n, const Elt I[/*logn*/], const Field& F)
-      : eq_(n, 1) {
-    filleq(&eq_.v_[0], logn, n, I, F);
+      : Dense<Field>(n, 1) {
+    filleq(&v_[0], logn, n, I, F);
   }
 
-  corner_t n() const { return eq_.n0_; }
-  Elt at(corner_t j, const Field& F) const { return eq_.at(j); }
-
-  T2 t2_at_corners(corner_t p, const Field& F) const {
-    return eq_.t2_at_corners(p, 0, F);
-  }
-
-  Eqs* bind(const Elt& r, const Field& F) {
-    eq_.bind(r, F);
-    return this;
-  }
-
-  Elt scalar(const Field& F) { return eq_.scalar(); }
+  corner_t n() const { return n0_; }
 
   // Optimization for a special case: return a raw vector EQ[G0|.] + alpha *
   // EQ[G1|.]  Return std::vector<> because we don't need the full
@@ -69,8 +57,6 @@ class Eqs {
   }
 
  private:
-  Dense<Field> eq_;
-
   // Return ceil(a / 2^{n}) for a != 0.
   //
   // Several ways exist to compute ceil(a/b) given a primitive that

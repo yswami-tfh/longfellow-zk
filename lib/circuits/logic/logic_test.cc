@@ -492,12 +492,13 @@ TEST(Logic, Bitvec) {
 
   // Corner cases of length
   auto ea = L.vbit<w>(9);
-  EXPECT_EQ(L.eval(L.lor(1, 0, [&](size_t i) { return ea[i]; })), L.konst(0));
-  EXPECT_EQ(L.eval(L.lor_exclusive(1, 0, [&](size_t i) { return ea[i]; })),
-            L.konst(0));
-  EXPECT_EQ(L.eval(L.land(1, 0, [&](size_t i) { return ea[i]; })), L.konst(1));
-  EXPECT_EQ(L.mul(1, 0, [&](size_t i) { return L.eval(ea[i]); }), L.konst(1));
-  EXPECT_EQ(L.add(1, 0, [&](size_t i) { return L.eval(ea[i]); }), L.konst(0));
+  auto lambda_ea = [&](size_t i) { return ea[i]; };
+  auto lambda_eval_ea = [&](size_t i) { return L.eval(ea[i]); };
+  EXPECT_EQ(L.eval(L.lor(1, 0, lambda_ea)), L.konst(0));
+  EXPECT_EQ(L.eval(L.lor_exclusive(1, 0, lambda_ea)), L.konst(0));
+  EXPECT_EQ(L.eval(L.land(1, 0, lambda_ea)), L.konst(1));
+  EXPECT_EQ(L.mul(1, 0, lambda_eval_ea), L.konst(1));
+  EXPECT_EQ(L.add(1, 0, lambda_eval_ea), L.konst(0));
 }
 }  // namespace
 }  // namespace proofs

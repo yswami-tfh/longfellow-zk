@@ -15,13 +15,8 @@
 add_compile_definitions(OPENSSL_SUPPRESS_DEPRECATED=1)
 include(GoogleTest)
 
-macro(proofs_add_test PROG)
-    add_executable(${PROG} ${PROG}.cc ${ARGN})
-
+macro(proofs_add_testing_libraries PROG)
     # libraries that are common enough to be useful in all tests
-    target_link_libraries(${PROG} ec)    
-    target_link_libraries(${PROG} algebra)
-    target_link_libraries(${PROG} util)
     target_link_libraries(${PROG} testing_main)    
 
 #   -static won't work on Debian because libbenchmark-dev is
@@ -30,10 +25,19 @@ macro(proofs_add_test PROG)
 
 #    target_link_libraries(${PROG} -static)
 
-    target_link_libraries(${PROG} gtest)
+    # on Debian buster, gtest seems to need pthread
+    target_link_libraries(${PROG} gtest pthread)
     target_link_libraries(${PROG} benchmark)
 
     gtest_discover_tests(${PROG})
+endmacro()
+
+macro(proofs_add_test PROG)
+    add_executable(${PROG} ${PROG}.cc ${ARGN})
+    target_link_libraries(${PROG} ec)    
+    target_link_libraries(${PROG} algebra)
+    target_link_libraries(${PROG} util)
+    proofs_add_testing_libraries(${PROG})
 endmacro()
 
 macro(proofs_add_tests)

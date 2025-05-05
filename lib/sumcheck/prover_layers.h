@@ -193,7 +193,7 @@ class ProverLayers {
 
         // n0_ is the copy dimension, n1_ is the wire dimension.
         for (corner_t c = 0; c < W->n0_; c += 2) {
-          CPoly poly = cpoly_at_eqs(EQ, c, F)
+          CPoly poly = cpoly_at_dense(EQ, c, 0, F)
                            .mul(cpoly_at_dense(W, c, r, F), F)
                            .mul(cpoly_at_dense(W, c, l, F), F);
           sumc.add(poly, F);
@@ -211,7 +211,7 @@ class ProverLayers {
       W->bind(rnd, F);
     }
 
-    Elt eq0 = EQ->scalar(F);
+    Elt eq0 = EQ->scalar();
 
     W->reshape(W->n1_);
     check(W->n1_ == 1, "W->n1_ == 1");
@@ -329,10 +329,6 @@ class ProverLayers {
     pr->l[layer].wc[1] = tt[1];
 
     ts.write(tt, 1, 2);
-  }
-
-  CPoly cpoly_at_eqs(const Eqs<Field>* EQ, corner_t p, const Field& F) {
-    return CPoly::extend(EQ->t2_at_corners(p, F), F);
   }
 
   CPoly cpoly_at_dense(const Dense<Field>* D, corner_t p0, corner_t p1,

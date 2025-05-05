@@ -344,9 +344,10 @@ const auto kOmega128 =
 const uint64_t kOmegaOrder128 = 1ull << 32;
 const FFT_p128 fft_p128(fp128, kOmega128, kOmegaOrder128);
 
-BENCHMARK(BM_ReedSolomon<Fp128, FFT_p128, RS_p128, fp128, fft_p128>)
-    ->RangeMultiplier(4)
-    ->Range(1 << 10, 1 << 20);
+void BM_ReedSolomonFp128(benchmark::State& state) {
+  BM_ReedSolomon<Fp128, FFT_p128, RS_p128, fp128, fft_p128>(state);
+}
+BENCHMARK(BM_ReedSolomonFp128)->RangeMultiplier(4)->Range(1 << 10, 1 << 20);
 
 // FP 64
 using Fp64 = Fp<1>;
@@ -366,13 +367,16 @@ const auto kOmega64_2 = fp64_2.of_string("2752994695033296049");
 const uint64_t kOmegaOrder64_2 = 1ull << 32;
 const FFT_p64_2 fft_p64_2(fp64, fp64_2, kOmega64_2, kOmegaOrder64_2);
 
-BENCHMARK(BM_ReedSolomon<Fp64, FFT_p64, RS_p64, fp64, fft_p64>)
-    ->RangeMultiplier(4)
-    ->Range(1 << 10, 1 << 20);
+void BM_ReedSolomonFp64(benchmark::State& state) {
+  BM_ReedSolomon<Fp64, FFT_p64, RS_p64, fp64, fft_p64>(state);
+}
+BENCHMARK(BM_ReedSolomonFp64)->RangeMultiplier(4)->Range(1 << 10, 1 << 20);
 
-BENCHMARK(BM_ReedSolomon<Fp64, FFT_p64_2, RS_p64_2, fp64, fft_p64_2>)
-    ->RangeMultiplier(4)
-    ->Range(1 << 10, 1 << 20);
+void BM_ReedSolomonFp64_2(benchmark::State& state) {
+  BM_ReedSolomon<Fp64, FFT_p64_2, RS_p64_2, fp64, fft_p64_2>(state);
+}
+
+BENCHMARK(BM_ReedSolomonFp64_2)->RangeMultiplier(4)->Range(1 << 10, 1 << 20);
 
 // FP p256^2
 using Fp256 = Fp256<>;
@@ -389,9 +393,11 @@ const FFT_p256_2 fft_p256_2(
                       "220613054416637641043"),
     1ull << 31);
 
-BENCHMARK(BM_ReedSolomon<Fp256, FFT_p256_2, RS_p256_2, fp256, fft_p256_2>)
-    ->RangeMultiplier(4)
-    ->Range(1 << 10, 1 << 20);
+void BM_ReedSolomonFp256(benchmark::State& state) {
+  BM_ReedSolomon<Fp256, FFT_p256_2, RS_p256_2, fp256, fft_p256_2>(state);
+}
+
+BENCHMARK(BM_ReedSolomonFp256)->RangeMultiplier(4)->Range(1 << 10, 1 << 20);
 
 }  // namespace
 }  // namespace proofs

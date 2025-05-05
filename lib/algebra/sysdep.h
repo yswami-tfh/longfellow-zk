@@ -24,7 +24,7 @@
 #if defined(__x86_64__) || defined(__i386__)
 // system-dependent basic arithmetic functions: add with carry
 // and 64x64->128 bit multiplication
-#include <immintrin.h>  // IWYU pragma: keep
+#include <x86intrin.h>  // IWYU pragma: keep
 #endif
 
 namespace proofs {

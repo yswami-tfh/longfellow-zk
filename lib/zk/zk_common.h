@@ -412,7 +412,7 @@ class ZkCommon {
     Eqs<Field> eq1(cla.logv, num_inputs, cla.g[1], F);
     Elt pub_binding = F.zero();
     for (index_t i = 0; i < num_inputs; ++i) {
-      Elt b_i = F.addf(eq0.at(i, F), F.mulf(alpha, eq1.at(i, F)));
+      Elt b_i = F.addf(eq0.at(i), F.mulf(alpha, eq1.at(i)));
       if (i < pub_inputs) {
         F.add(pub_binding, F.mulf(b_i, pub.at(i)));
       } else {

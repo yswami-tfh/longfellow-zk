@@ -40,33 +40,33 @@ class CborPlucker {
   using EltW = typename Logic::EltW;
   using Elt = typename Field::Elt;
   static constexpr size_t kN = 2 * (NJ + 1);
-  using Poly = Poly<kN, Field>;
-  using Interpolation = Interpolation<kN, Field>;
+  using PolyN = Poly<kN, Field>;
+  using InterpolationN = Interpolation<kN, Field>;
   const Logic& l_;
-  Poly pluckerb_;
-  std::vector<Poly> pluckerj_;
+  PolyN pluckerb_;
+  std::vector<PolyN> pluckerj_;
 
   explicit CborPlucker(const Logic& l) : l_(l), pluckerj_(NJ) {
     const Field& F = l_.f_;  // shorthand
     // evaluation points
-    Poly X;
+    PolyN X;
     for (size_t i = 0; i < kN; ++i) {
       X[i] = bit_plucker_point<Field, kN>()(i, F);
     }
 
     // encode B in the low-order bit
-    Poly Y;
+    PolyN Y;
     for (size_t i = 0; i < kN; ++i) {
       Y[i] = F.of_scalar(i & 1);
     }
-    pluckerb_ = Interpolation::monomial_of_lagrange(Y, X, F);
+    pluckerb_ = InterpolationN::monomial_of_lagrange(Y, X, F);
 
     // encode J in the high-order bits
     for (size_t j = 0; j < NJ; ++j) {
       for (size_t i = 0; i < kN; ++i) {
         Y[i] = F.of_scalar((i >> 1) == j);
       }
-      pluckerj_[j] = Interpolation::monomial_of_lagrange(Y, X, F);
+      pluckerj_[j] = InterpolationN::monomial_of_lagrange(Y, X, F);
     }
   }
 

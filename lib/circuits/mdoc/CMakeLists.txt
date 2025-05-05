@@ -15,8 +15,8 @@
 add_library(mdoc mdoc_zk.cc zk_spec.cc)
 target_link_libraries(mdoc flatsha ec algebra util zstd)
 
-add_library(mdoc_static STATIC
-    $<TARGET_OBJECTS:mdoc>
+add_library(mdoc_static STATIC mdoc_zk.cc zk_spec.cc)
+target_link_libraries(mdoc_static
     $<TARGET_OBJECTS:flatsha>
     $<TARGET_OBJECTS:ec>
     $<TARGET_OBJECTS:algebra>
@@ -26,12 +26,15 @@ add_library(mdoc_static STATIC
 proofs_add_test(mdoc_signature_test)
 target_link_libraries(mdoc_signature_test mdoc)
 
-proofs_add_test(mdoc_zk_test)
-target_link_libraries(mdoc_zk_test mdoc)
-
 proofs_add_test(zk_spec_test)
 target_link_libraries(zk_spec_test mdoc)
 
+# link mdoc_zk_test explicitly against the static library
+# so that we know that the static library works
+add_executable(mdoc_zk_test mdoc_zk_test.cc)
+target_link_libraries(mdoc_zk_test mdoc_static)
+proofs_add_testing_libraries(mdoc_zk_test)
+target_link_libraries(mdoc_zk_test crypto zstd)
 
 set(installable_libs mdoc_static)
 install(TARGETS ${installable_libs} DESTINATION lib)

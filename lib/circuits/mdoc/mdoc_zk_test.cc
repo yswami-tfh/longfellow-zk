@@ -37,7 +37,7 @@ class MdocZKTest : public testing::Test {
  protected:
   MdocZKTest() { set_log_level(INFO); }
 
-  static void SetUpTestSuite() {
+  static void SetUpTestCase() {
     const ZkSpecStruct &zk_spec_1 = kZkSpecs[0];
     const ZkSpecStruct &zk_spec_2 = kZkSpecs[1];
     if (circuit1_ == nullptr) {
@@ -48,9 +48,13 @@ class MdocZKTest : public testing::Test {
     }
   }
 
-  static void TearDownTestSuite() {
-    free(circuit1_);
-    free(circuit2_);
+  static void TearDownTestCase() {
+    if (circuit1_ != nullptr) {
+      free(circuit1_);
+      free(circuit2_);
+      circuit1_ = nullptr;
+      circuit2_ = nullptr;
+    }
   }
 
   void run_test(size_t num_attrs, const RequestedAttribute *attrs,
