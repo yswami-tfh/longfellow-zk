@@ -18,10 +18,10 @@ jobs:
 
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-16core
             cpp_compiler: clang++
             install_command: "sudo apt-get update -y && sudo apt-get install -y clang cmake git libssl-dev libzstd-dev libgtest-dev libbenchmark-dev zlib1g-dev"
-          - os: ubuntu-22.04
+          - os: ubuntu-22.04-16core
             cpp_compiler: clang++
             install_command: "sudo apt-get update -y && sudo apt-get install -y clang cmake git libssl-dev libzstd-dev libgtest-dev libbenchmark-dev zlib1g-dev"
 
