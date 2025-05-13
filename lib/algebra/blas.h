@@ -44,6 +44,14 @@ class Blas {
     return r;
   }
 
+  // y = a*y
+  static void scale(size_t n, Elt y[/*k:incy*/], size_t incy, const Elt a,
+                    const Field& F) {
+    for (size_t i = 0; i < n; i++) {
+      F.mul(y[i * incy], a);
+    }
+  }
+
   // y = a*x + y.
   static void axpy(size_t n, Elt y[/*k:incy*/], size_t incy, const Elt a,
                    const Elt x[/*k:incx*/], size_t incx, const Field& F) {

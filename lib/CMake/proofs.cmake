@@ -14,6 +14,8 @@
 
 add_compile_definitions(OPENSSL_SUPPRESS_DEPRECATED=1)
 include(GoogleTest)
+find_package(benchmark REQUIRED)
+find_package(GTest REQUIRED)
 
 macro(proofs_add_testing_libraries PROG)
     # libraries that are common enough to be useful in all tests

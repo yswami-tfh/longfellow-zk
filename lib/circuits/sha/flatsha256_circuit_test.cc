@@ -185,13 +185,14 @@ TEST(FlatSHA256_Circuit, assert_message) {
   using EvalBackend = EvaluationBackend<Field>;
   using Logic = Logic<Field, EvalBackend>;
   using v8 = typename Logic::v8;
+  using v256 = typename Logic::v256;
   using FlatSha = FlatSHA256Circuit<Logic, BitPlucker<Logic, kShaPluckerSize>>;
   const EvalBackend ebk(F);
   const Logic L(&ebk, F);
   const FlatSha FSHA(L);
   BitPluckerEncoder<Field, kShaPluckerSize> BPENC(F);
 
-  constexpr size_t max = 16;
+  constexpr size_t max = 32;
   std::vector<uint8_t> in(64 * max);
   std::vector<FlatSHA256Witness::BlockWitness> bw(max);
 
@@ -202,7 +203,6 @@ TEST(FlatSHA256_Circuit, assert_message) {
     size_t len = SHA256_TV[i].len;
     if (len + 9 < 64 * max) {
       continue;
-      // skip large tests to allow timing different sizes
     }
 
     uint8_t numb;
@@ -213,6 +213,11 @@ TEST(FlatSHA256_Circuit, assert_message) {
     for (size_t j = 0; j < 8; ++j) {
       uint32_t h1j = SHA256_ru32be(&SHA256_TV[i].hash[j * 4]);
       EXPECT_EQ(bw[numb - 1].h1[j], h1j);
+    }
+
+    v256 target;
+    for (size_t j = 0; j < 256; ++j) {
+      target[j] = L.bit((SHA256_TV[i].hash[(255 - j) / 8] >> (j % 8)) & 0x1);
     }
 
     // fill input wires
@@ -236,7 +241,7 @@ TEST(FlatSHA256_Circuit, assert_message) {
       }
     }
 
-    FSHA.assert_message(max, numbW, inW.data(), bwW.data());
+    FSHA.assert_message_hash(max, numbW, inW.data(), target, bwW.data());
   }
 }
 
@@ -244,6 +249,7 @@ TEST(FlatSHA256_Circuit, assert_message_prefix) {
   using EvalBackend = EvaluationBackend<Field>;
   using Logic = Logic<Field, EvalBackend>;
   using v8 = typename Logic::v8;
+  using v256 = typename Logic::v256;
   using FlatSha = FlatSHA256Circuit<Logic, BitPlucker<Logic, kShaPluckerSize>>;
   const EvalBackend ebk(F);
   const Logic L(&ebk, F);
@@ -274,6 +280,11 @@ TEST(FlatSHA256_Circuit, assert_message_prefix) {
       EXPECT_EQ(bw[numb - 1].h1[j], h1j);
     }
 
+    v256 target;
+    for (size_t j = 0; j < 256; ++j) {
+      target[j] = L.bit((SHA256_TV[i].hash[(255 - j) / 8] >> (j % 8)) & 0x1);
+    }
+
     // fill input wires
     v8 numbW = L.vbit8(numb);
 
@@ -297,8 +308,8 @@ TEST(FlatSHA256_Circuit, assert_message_prefix) {
     }
     const uint8_t* prefix = (const uint8_t*)SHA256_TV[i].str;
 
-    FSHA.assert_message_with_prefix(max, numbW, inW.data(), prefix, split,
-                                    bwW.data());
+    FSHA.assert_message_hash_with_prefix(max, numbW, inW.data(), prefix, split,
+                                         target, bwW.data());
   }
 }
 
@@ -382,18 +393,41 @@ T packed_input(QuadCircuit<Field>& Q) {
 
 TEST(FlatSHA256_Circuit, block_size_p256) {
   test_block_circuit_size<Fp256Base, 1>(p256_base, "block_size_p256_pack_1");
+}
+
+TEST(FlatSHA256_Circuit, block_size_p256_2) {
   test_block_circuit_size<Fp256Base, 2>(p256_base, "block_size_p256_pack_2");
+}
+
+TEST(FlatSHA256_Circuit, block_size_p256_3) {
   test_block_circuit_size<Fp256Base, 3>(p256_base, "block_size_p256_pack_3");
+}
+
+TEST(FlatSHA256_Circuit, block_size_p256_4) {
   test_block_circuit_size<Fp256Base, 4>(p256_base, "block_size_p256_pack_4");
 }
 
-TEST(FlatSHA256_Circuit, block_size_gf2_128) {
+TEST(FlatSHA256_Circuit, block_size_gf2_128_1) {
   using f_128 = GF2_128<>;
   const f_128 Fs;
-
   test_block_circuit_size<f_128, 1>(Fs, "block_size_gf2128_pack_1");
+}
+
+TEST(FlatSHA256_Circuit, block_size_gf2_128_2) {
+  using f_128 = GF2_128<>;
+  const f_128 Fs;
   test_block_circuit_size<f_128, 2>(Fs, "block_size_gf2128_pack_2");
+}
+
+TEST(FlatSHA256_Circuit, block_size_gf2_128_3) {
+  using f_128 = GF2_128<>;
+  const f_128 Fs;
   test_block_circuit_size<f_128, 3>(Fs, "block_size_gf2128_pack_3");
+}
+
+TEST(FlatSHA256_Circuit, block_size_gf2_128_4) {
+  using f_128 = GF2_128<>;
+  const f_128 Fs;
   test_block_circuit_size<f_128, 4>(Fs, "block_size_gf2128_pack_4");
 }
 
@@ -405,9 +439,11 @@ TEST(FlatSHA256_Circuit, block_size_gf2_128) {
 template <class Field, size_t pluckerSize>
 std::unique_ptr<Circuit<Field>> make_circuit(size_t numBlocks, size_t numCopies,
                                              const Field& f) {
+  set_log_level(ERROR);
   using CompilerBackend = CompilerBackend<Field>;
   using LogicCircuit = Logic<Field, CompilerBackend>;
   using v8 = typename LogicCircuit::v8;
+  using v256 = typename LogicCircuit::v256;
   using FlatShaC =
       FlatSHA256Circuit<LogicCircuit, BitPlucker<LogicCircuit, pluckerSize>>;
   using ShaBlockWitness = typename FlatShaC::BlockWitness;
@@ -422,15 +458,18 @@ std::unique_ptr<Circuit<Field>> make_circuit(size_t numBlocks, size_t numCopies,
   for (size_t i = 0; i < 64 * numBlocks; ++i) {
     in[i] = lc.template vinput<8>();
   }
+
+  v256 target = lc.template vinput<256>();
+
   std::vector<ShaBlockWitness> bw(numBlocks);
   for (size_t j = 0; j < numBlocks; j++) {
     bw[j].input(Q);
   }
 
-  sha.assert_message(numBlocks, nb, &in[0], &bw[0]);
+  sha.assert_message_hash(numBlocks, nb, &in[0], target, &bw[0]);
 
   auto circuit = Q.mkcircuit(numCopies);
-  dump_info("assert_message", Q);
+  dump_info("assert_message_hash", Q);
   return circuit;
 }
 
@@ -457,8 +496,16 @@ void fill_input(Dense<Field>& W, size_t numBlocks, size_t ninputs,
   uint8_t numb;
   std::vector<uint8_t> inb(64 * numBlocks);
   std::vector<FlatSHA256Witness::BlockWitness> bwb(numBlocks);
+  size_t bmax = sizeof(kSha_benchmark_)/sizeof(kSha_benchmark_[0]);
+  size_t bench_index = numBlocks - 1;
+  if (bench_index > bmax) {
+    bench_index = bmax - 1;
+  }
+  std::vector<uint8_t> message(kSha_benchmark_[bench_index].len, 'a');
   FlatSHA256Witness::transform_and_witness_message(
-      3, (const uint8_t*)"abc", numBlocks, numb, &inb[0], &bwb[0]);
+      message.size(), message.data(), numBlocks, numb, &inb[0], &bwb[0]);
+
+  const uint8_t *hash = kSha_benchmark_[bench_index].hash;
 
   // fill input wires
   for (size_t c = 0; c < numCopies; ++c) {
@@ -469,6 +516,14 @@ void fill_input(Dense<Field>& W, size_t numBlocks, size_t ninputs,
     for (size_t j = 0; j < numBlocks * 64; j++) {
       push(inb[j], wi, c, numCopies, W, F);
     }
+
+    // Target hash.
+    for (size_t j = 0; j < 256; ++j) {
+      W.v_[(wi++) * numCopies + c] =
+          (hash[(255 - j) / 8] >> (j % 8)) & 1 ? F.one() : F.zero();
+    }
+
+    // Sha block witnesses.
     BitPluckerEncoder<Field, pluckerSize> BPENC(F);
     for (size_t j = 0; j < numBlocks; j++) {
       for (size_t k = 0; k < 48; ++k) {
@@ -501,9 +556,10 @@ void BM_ShaSumcheckProver_fp2_128(benchmark::State& state) {
   for (auto s : state) {
     Proof<f_128> proof(CIRCUIT->nl);
     run_prover(CIRCUIT.get(), W.clone(), &proof, Fs);
+    benchmark::DoNotOptimize(proof);
   }
 }
-BENCHMARK(BM_ShaSumcheckProver_fp2_128)->RangeMultiplier(2)->Range(1, 64);
+BENCHMARK(BM_ShaSumcheckProver_fp2_128)->RangeMultiplier(2)->Range(1, 33);
 
 void BM_ShaSumcheckCopyProver_fp2_128(benchmark::State& state) {
   using f_128 = GF2_128<>;
@@ -518,10 +574,11 @@ void BM_ShaSumcheckCopyProver_fp2_128(benchmark::State& state) {
   for (auto s : state) {
     Proof<f_128> proof(CIRCUIT->nl);
     run_prover(CIRCUIT.get(), W.clone(), &proof, F);
+    benchmark::DoNotOptimize(proof);
   }
 }
 
-BENCHMARK(BM_ShaSumcheckCopyProver_fp2_128)->RangeMultiplier(2)->Range(1, 32);
+BENCHMARK(BM_ShaSumcheckCopyProver_fp2_128)->RangeMultiplier(2)->Range(1, 33);
 
 void BM_ShaZK_fp2_128(benchmark::State& state) {
   using f_128 = GF2_128<>;
@@ -546,9 +603,10 @@ void BM_ShaZK_fp2_128(benchmark::State& state) {
     ZkProver<f_128, RSFactory> prover(*CIRCUIT, Fs, rsf);
     prover.commit(zkpr, W, tp, rng);
     prover.prove(zkpr, W, tp);
+    benchmark::DoNotOptimize(zkpr);
   }
 }
-BENCHMARK(BM_ShaZK_fp2_128)->RangeMultiplier(2)->Range(1, 32);
+BENCHMARK(BM_ShaZK_fp2_128)->RangeMultiplier(2)->Range(1, 33);
 
 void BM_ShaZK_Fp64_2(benchmark::State& state) {
   using f_goldi = Fp<1>;
@@ -584,12 +642,13 @@ void BM_ShaZK_Fp64_2(benchmark::State& state) {
     ZkProver<Field2, RSFactory> prover(*CIRCUIT, base_2, rsf);
     prover.commit(zkpr, W, tp, rng);
     prover.prove(zkpr, W, tp);
+    benchmark::DoNotOptimize(zkpr);
   }
 }
 BENCHMARK(BM_ShaZK_Fp64_2)->RangeMultiplier(2)->Range(1, 32);
 
 // This benchmark measures the time it takes to bind the quad for SHA.
-void BM_ShaZK_fp2_128_quadbind(benchmark::State& state) {
+void BM_ShaZK_quadbind_fp2_128(benchmark::State& state) {
   using f_128 = GF2_128<>;
   using Elt = f_128::Elt;
   const f_128 Fs;
@@ -612,14 +671,13 @@ void BM_ShaZK_fp2_128_quadbind(benchmark::State& state) {
   for (auto s : state) {
     size_t logv = CIRCUIT->logv;
     for (size_t ly = 0; ly < CIRCUIT->nl; ++ly) {
-      //   // Eqs<Field> EQ(logc, 0, nc, bnd.q, F);
       auto QUAD = CIRCUIT->l[ly].quad->clone();
       QUAD->bind_g(logv, g0, g1, alpha, beta, Fs);
       logv = CIRCUIT->l[ly].logw;
     }
   }
 }
-BENCHMARK(BM_ShaZK_fp2_128_quadbind)->RangeMultiplier(2)->Range(1, 32);
+BENCHMARK(BM_ShaZK_quadbind_fp2_128)->RangeMultiplier(2)->Range(1, 32);
 
 
 }  // namespace

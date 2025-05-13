@@ -27,6 +27,10 @@ googlebenchmark.
 `$ yum install -y clang libzstd-devel openssl-devel git cmake google-benchmark-devel gtest-devel`
 
 
+### MacOS
+Ensure that Xcode command line tools such as `clang` and `cmake` are installed.
+`$ brew install googletest google-benchmark zstd`
+
 ## Building manually
 
 First run the cmake initialization step
@@ -36,4 +40,13 @@ First run the cmake initialization step
 Next:
 
 `$ cd clang-build-release && make -j 16 && ctest -j 16`
+
+# Running benchmarks
+
+We have defined several unit, sumcheck, and zk benchmarks. Here are some of
+them:
+
+`
+$ ./algebra/fft_test --benchmark_filter=BM_*
+$ ./circuits/sha/flatsha256_circuit_test --benchmark_filter=BM_ShaZK_fp2_128
 

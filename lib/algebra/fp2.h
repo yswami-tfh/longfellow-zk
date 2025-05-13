@@ -34,6 +34,7 @@ template <class Field, bool nonresidue_is_mone = true>
 class Fp2 {
  public:
   using Scalar = typename Field::Elt;
+  using BaseField = Field;
   using TypeTag = typename Field::TypeTag;
 
   // size of the serialization into bytes
@@ -68,6 +69,8 @@ class Fp2 {
 
   Fp2(const Fp2&) = delete;
   Fp2& operator=(const Fp2&) = delete;
+
+  const Field& base_field() const { return f_; }
 
   Scalar real(const Elt& e) const { return e.re; }
   bool is_real(const Elt& e) const { return e.im == f_.zero(); }
@@ -141,6 +144,10 @@ class Fp2 {
   }
   Elt invertf(Elt a) const {
     invert(a);
+    return a;
+  }
+  Elt conjf(Elt a) const {
+    conj(a);
     return a;
   }
 

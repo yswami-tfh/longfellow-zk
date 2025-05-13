@@ -144,11 +144,9 @@ class MdocHash {
                               const v8 now[/*20*/], const v256& e,
                               const v256& dpkx, const v256& dpky,
                               const Witness& vw) const {
-    sha_.assert_message_with_prefix(kMaxSHABlocks, vw.nb_, vw.in_, kCose1Prefix,
-                                    kCose1PrefixLen, vw.sig_sha_);
-
-    // Verify that the hash of the mdoc is equal to e.
-    assert_hash(e, vw);
+    sha_.assert_message_hash_with_prefix(kMaxSHABlocks, vw.nb_, vw.in_,
+                                         kCose1Prefix, kCose1PrefixLen, e,
+                                         vw.sig_sha_);
 
     // Shift a portion of the MSO into buf and check it.
     const v8 zz = lc_.template vbit<8>(0);  // cannot appear in strings
@@ -192,29 +190,23 @@ class MdocHash {
 
     // Attributes: Equality of hash with MSO value
     for (size_t ai = 0; ai < vw.num_attr_; ++ai) {
-      auto two = lc_.template vbit<8>(2);
       v8 B[64];
-      sha_.assert_message(2, two, vw.attrb_[ai].data(),
-                          vw.attr_sha_[ai].data());
-      {
-        // Check the hash matches the value in the signed MSO.
-        // The loop below accounts for endian and v32 vs v8 types.
-        r_.shift(vw.attr_mso_[ai].k, 2 + 32, &cmp_buf[0], kMaxMsoLen,
-                 vw.in_ + 5 + 2, zz, /*unroll=*/3);
+      // Check the hash matches the value in the signed MSO.
+      r_.shift(vw.attr_mso_[ai].k, 2 + 32, &cmp_buf[0], kMaxMsoLen,
+               vw.in_ + 5 + 2, zz, /*unroll=*/3);
 
-        // Basic CBOR check of the Tag
-        assert_bytes_at(2, &cmp_buf[0], kTag32);
+      // Basic CBOR check of the Tag
+      assert_bytes_at(2, &cmp_buf[0], kTag32);
 
-        for (size_t j = 0; j < 8; ++j) {
-          auto hj = sha_.bp_.unpack_v32(vw.attr_sha_[ai][1].h1[j]);
-          v32 mj;
-          // Repackage the buffer of v8s in be order
-          for (size_t k = 0; k < 32; ++k) {
-            mj[k] = cmp_buf[2 + j * 4 + (31 - k) / 8][k % 8];
-          }
-          lc_.vassert_eq(&mj, hj);
-        }
+      v256 mm;
+      // The loop below accounts for endian and v256 vs v8 types.
+      for (size_t j = 0; j < 256; ++j) {
+        mm[j] = cmp_buf[2 + (255 - j) / 8][(j % 8)];
       }
+
+      auto two = lc_.template vbit<8>(2);
+      sha_.assert_message_hash(2, two, vw.attrb_[ai].data(), mm,
+                               vw.attr_sha_[ai].data());
 
       // Check that the attribute_id and value occur in the hashed text.
       r_.shift(vw.attr_ei_[ai].offset, kIdLen, B, 128, vw.attrb_[ai].data(), zz,
@@ -257,39 +249,6 @@ class MdocHash {
         lc_.assert_eq(&got_k, want_k);
       }
     }
-  }
-
-  // Assert that the hash of the mdoc is equal to e.
-  // The hash is encoded in the SHA witness, and thus the correct block
-  // must be muxed for the comparison. Thus method first muxes the "packed"
-  // encoding of the SHA witness, then unpacks it and compares it to e to
-  // save a lot of work in the bit plucker.
-  void assert_hash(const v256& e, const Witness& vw) const {
-    sha_packed_v32 x[8];
-    for (size_t b = 0; b < kMaxSHABlocks; ++b) {
-      auto bt = lc_.veq(vw.nb_, b + 1); /* b is zero-indexed */
-      auto ebt = lc_.eval(bt);
-      for (size_t i = 0; i < 8; ++i) {
-        for (size_t k = 0; k < sha_.bp_.kNv32Elts; ++k) {
-          if (b == 0) {
-            x[i][k] = lc_.mul(&ebt, vw.sig_sha_[b].h1[i][k]);
-          } else {
-            auto maybe_sha = lc_.mul(&ebt, vw.sig_sha_[b].h1[i][k]);
-            x[i][k] = lc_.add(&x[i][k], maybe_sha);
-          }
-        }
-      }
-    }
-
-    // Unpack the hash into a v256 in reverse byte-order.
-    v256 mm;
-    for (size_t j = 0; j < 8; ++j) {
-      auto hj = sha_.bp_.unpack_v32(x[j]);
-      for (size_t k = 0; k < 32; ++k) {
-        mm[((7 - j) * 32 + k)] = hj[k];
-      }
-    }
-    lc_.vassert_eq(&mm, e);
   }
 
   // Asserts that the key is equal to the value in big-endian order in buf_be.

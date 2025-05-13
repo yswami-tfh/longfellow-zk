@@ -32,9 +32,11 @@ class Limb {
  public:
   using T = Limb<W64>;
 
-  // uint_fast32_t should translate to uint64_t on 64-bit machines and
-  // uint32_t on 32-bit machines.
-  using limb_t = uint_fast32_t;
+#if __WORDSIZE == 64
+  using limb_t = uint64_t;
+#else
+  using limb_t = uint32_t;
+#endif
 
   // sizes in bytes, bits, limbs, uint64_t
   static constexpr size_t kBytes = 8 * W64;

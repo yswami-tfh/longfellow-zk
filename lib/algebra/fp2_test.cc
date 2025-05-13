@@ -104,9 +104,9 @@ struct tests {
       C[i] = F.addf(F.mulf(k0, A[i]), F.mulf(k1, B[i]));
     }
 
-    FFT<Field>::fft(A.data(), n, omega, omega_order, F);
-    FFT<Field>::fft(B.data(), n, omega, omega_order, F);
-    FFT<Field>::fft(C.data(), n, omega, omega_order, F);
+    FFT<Field>::fftb(A.data(), n, omega, omega_order, F);
+    FFT<Field>::fftb(B.data(), n, omega, omega_order, F);
+    FFT<Field>::fftb(C.data(), n, omega, omega_order, F);
     for (size_t i = 0; i < n; ++i) {
       EXPECT_EQ(C[i], F.addf(F.mulf(k0, A[i]), F.mulf(k1, B[i])));
     }
@@ -130,9 +130,9 @@ struct tests {
     for (size_t i = 0; i < n; ++i) {
       C[i] = F.addf(F.mulf(k0, A[(i + 1) % n]), F.mulf(k1, B[i]));
     }
-    FFT<Field>::fft(A.data(), n, omega, omega_order, F);
-    FFT<Field>::fft(B.data(), n, omega, omega_order, F);
-    FFT<Field>::fft(C.data(), n, omega, omega_order, F);
+    FFT<Field>::fftb(A.data(), n, omega, omega_order, F);
+    FFT<Field>::fftb(B.data(), n, omega, omega_order, F);
+    FFT<Field>::fftb(C.data(), n, omega, omega_order, F);
     Elt w = F.one();
     for (size_t i = 0; i < n; ++i) {
       EXPECT_EQ(F.addf(F.mulf(k0, A[i]), F.mulf(F.mulf(k1, B[i]), w)),

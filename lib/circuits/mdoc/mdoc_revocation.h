@@ -115,17 +115,7 @@ class MdocRevocationSpan {
 
     // Check that e = hash(epoch || l || r)
     auto two = lc_.template vbit<8>(2);
-    sha_.assert_message(2, two, vw.preimage_, vw.sha_);
-
-    // Check that the bits of e match the bits of the hash.
-    v256 mm;
-    for (size_t j = 0; j < 8; ++j) {
-      auto hj = sha_.bp_.unpack_v32(vw.sha_[1].h1[j]);
-      for (size_t k = 0; k < 32; ++k) {
-        mm[((7 - j) * 32 + k)] = hj[k];
-      }
-    }
-    lc_.vassert_eq(&mm, vw.e_bits_);
+    sha_.assert_message_hash(2, two, vw.preimage_, vw.e_bits_, vw.sha_);
 
     // Check that the bits of e match the EltW for e.
     auto twok = lc_.one();

@@ -110,10 +110,9 @@ class JWT {
 
     ecc.verify_signature3(pkX, pkY, vw.e_, vw.jwt_sig_);
 
-    sha_.assert_message(kMaxJWTSHABlocks, vw.nb_, vw.preimage_, vw.sha_);
-
+    sha_.assert_message_hash(kMaxJWTSHABlocks, vw.nb_, vw.preimage_, vw.e_bits_,
+                             vw.sha_);
     lc_.vassert_is_bit(vw.e_bits_);
-    assert_hash(vw.e_bits_, vw);
 
     // Check that the e_bits_ match the EltW for e used in the signature.
     auto twok = lc_.one();
@@ -166,34 +165,6 @@ class JWT {
       auto end_quote = lc_.template vbit<8>('"');
       lc_.vassert_eq(&B[0], end_quote);
     }
-  }
-
-  // TODO: this is the same loop used in mdoc_hash. It should be refactored.
-  void assert_hash(const v256& e, const Witness& vw) const {
-    sha_packed_v32 x[8];
-    for (size_t b = 0; b < kMaxJWTSHABlocks; ++b) {
-      auto bt = lc_.veq(vw.nb_, b + 1); /* b is zero-indexed */
-      auto ebt = lc_.eval(bt);
-      for (size_t i = 0; i < 8; ++i) {
-        for (size_t k = 0; k < sha_.bp_.kNv32Elts; ++k) {
-          if (b == 0) {
-            x[i][k] = lc_.mul(&ebt, vw.sha_[b].h1[i][k]);
-          } else {
-            auto maybe_sha = lc_.mul(&ebt, vw.sha_[b].h1[i][k]);
-            x[i][k] = lc_.add(&x[i][k], maybe_sha);
-          }
-        }
-      }
-    }
-    // Unpack the hash into a v256 in reverse byte-order.
-    v256 mm;
-    for (size_t j = 0; j < 8; ++j) {
-      auto hj = sha_.bp_.unpack_v32(x[j]);
-      for (size_t k = 0; k < 32; ++k) {
-        mm[((7 - j) * 32 + k)] = hj[k];
-      }
-    }
-    lc_.vassert_eq(&mm, e);
   }
 
   void assert_string_eq(size_t max, const v8& len, const v8 got[/*max*/],

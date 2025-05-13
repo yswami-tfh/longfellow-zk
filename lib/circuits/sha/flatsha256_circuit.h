@@ -52,6 +52,7 @@ template <class Logic, class BitPlucker>
 class FlatSHA256Circuit {
  public:
   using v8 = typename Logic::v8;
+  using v256 = typename Logic::v256;
   using v32 = typename Logic::v32;
   using EltW = typename Logic::EltW;
   using Field = typename Logic::Field;
@@ -110,7 +111,7 @@ class FlatSHA256Circuit {
     }
 
     for (size_t i = 16; i < 64; ++i) {
-      auto sw2 = sigma1(w[i-2]);
+      auto sw2 = sigma1(w[i - 2]);
       auto sw15 = sigma0(w[i - 15]);
       std::vector<v32> terms = {sw2, w[i - 7], sw15, w[i - 16]};
       w[i] = outw[i - 16];
@@ -196,8 +197,8 @@ class FlatSHA256Circuit {
     assert_transform_block(in, H0.data(), poutw, poute, pouta, pH1);
   }
 
-  /* This method checks if H(in) == target.
-     The target is expresesd in the block_witness for the entire message.
+  /* This method checks that the block witness corresponds to the iterated
+     computation of the sha block transform on the input.
   */
   void assert_message(size_t max, const v8& nb, const v8 in[/* 64*max */],
                       const BlockWitness bw[/*max*/]) const {
@@ -227,11 +228,8 @@ class FlatSHA256Circuit {
     }
   }
 
-  /* This method checks if H(prefix || in) == target.
-     Since the prefix is hardcoded, the compiler can propagate constants
-     and produce smaller, faster circuits.
-     To use this method, compute the block_witness for the entire message as
-     usual.
+  /* This method checks that the block witness corresponds to the iterated
+     computation of the sha block transform on the prefix || input.
   */
   void assert_message_with_prefix(size_t max, const v8& nb,
                                   const v8 in[/* < 64*max */],
@@ -249,6 +247,65 @@ class FlatSHA256Circuit {
     }
 
     assert_message(max, nb, bbuf.data(), bw);
+  }
+
+  /* This method checks if H(in) == target. The method requires that in[]
+  contains exactly nb*64 bytes and has been padded according to the SHA256
+  specification.
+  */
+  void assert_message_hash(size_t max, const v8& nb, const v8 in[/* 64*max */],
+                           const v256& target,
+                           const BlockWitness bw[/*max*/]) const {
+    assert_message(max, nb, in, bw);
+    assert_hash(max, target, nb, bw);
+  }
+
+  // This method checks if H(prefix || in) == target.
+  // Since the prefix is hardcoded, the compiler can propagate constants
+  // and produce smaller circuits. As above, the method requires that in[]
+  // contains exactly nb*64 bytes and has been padded according to the SHA256
+  // specification. To use this method, compute the block_witness for the
+  // entire message as usual.
+  void assert_message_hash_with_prefix(size_t max, const v8& nb,
+                                       const v8 in[/* 64*max */],
+                                       const uint8_t prefix[/* len */],
+                                       size_t len, const v256& target,
+                                       const BlockWitness bw[/*max*/]) const {
+    assert_message_with_prefix(max, nb, in, prefix, len, bw);
+    assert_hash(max, target, nb, bw);
+  }
+
+  // Verifies that the nb_th element of the block witness is equal to e.
+  // The block witness keeps track of the intermediate output of each
+  // block transform.  Therefore, this method can be used to verify that the
+  // prover knows a preimage that hashes to the desired e.
+  void assert_hash(size_t max, const v256& e, const v8& nb,
+                   const BlockWitness bw[/*max*/]) const {
+    packed_v32 x[8];
+    for (size_t b = 0; b < max; ++b) {
+      auto bt = l_.veq(nb, b + 1); /* b is zero-indexed */
+      auto ebt = l_.eval(bt);
+      for (size_t i = 0; i < 8; ++i) {
+        for (size_t k = 0; k < bp_.kNv32Elts; ++k) {
+          if (b == 0) {
+            x[i][k] = l_.mul(&ebt, bw[b].h1[i][k]);
+          } else {
+            auto maybe_sha = l_.mul(&ebt, bw[b].h1[i][k]);
+            x[i][k] = l_.add(&x[i][k], maybe_sha);
+          }
+        }
+      }
+    }
+
+    // Unpack the hash into a v256 in reverse byte-order.
+    v256 mm;
+    for (size_t j = 0; j < 8; ++j) {
+      auto hj = bp_.unpack_v32(x[j]);
+      for (size_t k = 0; k < 32; ++k) {
+        mm[((7 - j) * 32 + k)] = hj[k];
+      }
+    }
+    l_.vassert_eq(&mm, e);
   }
 
  private:

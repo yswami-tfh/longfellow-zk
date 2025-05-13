@@ -23,12 +23,12 @@
 
 #include "algebra/blas.h"
 #include "algebra/fft.h"
-#include "util/panic.h"
+#include "algebra/rfft.h"
 
 /*
 All of the classes in this package compute convolutions.
 That is, given inputs arrays of field elements x, y, with |x|=n, |y|=m,
-these methods compute the first m entries of 
+these methods compute the first m entries of
 
    z[k] = \sum_{i=0}^{n-1} x[i] y[k-i]
 
@@ -58,7 +58,7 @@ class FFTConvolution {
 
  public:
   FFTConvolution(size_t n, size_t m, const Field& f, const Elt omega,
-                  uint64_t omega_order, const Elt y[/*m*/])
+                 uint64_t omega_order, const Elt y[/*m*/])
       : f_(f),
         omega_(omega),
         omega_order_(omega_order),
@@ -66,15 +66,12 @@ class FFTConvolution {
         m_(m),
         padding_(choose_padding(m)),
         y_fft_(padding_, f_.zero()) {
-    // First copy/pad y.
     Blas<Field>::copy(m, &y_fft_[0], 1, y, 1);
-    // take fft of y_fft_
-    FFT<Field>::fft(&y_fft_[0], padding_, omega_, omega_order_, f_);
-    // To compute the inverse fft, we must divide by the padding
-    Elt inverse_padding = f_.invertf(f_.of_scalar(padding_));
-    for (size_t i = 0; i < padding_; ++i) {
-      f_.mul(y_fft_[i], inverse_padding);
-    }
+    FFT<Field>::fftf(&y_fft_[0], padding_, omega_, omega_order_, f_);
+
+    // Pre-scale Y by 1/N to compensate for the scaling in FFTB(FFTF(.))
+    Blas<Field>::scale(padding_, &y_fft_[0], 1,
+                       f_.invertf(f_.of_scalar(padding_)), f_);
   }
 
   // Computes (first m entries of) convolution of x with y, outputs in z:
@@ -82,15 +79,14 @@ class FFTConvolution {
   // Note that y has already been FFT'd and divided by padding_ in constructor
   void convolution(const Elt x[/*n_*/], Elt z[/*m_*/]) const {
     std::vector<Elt> x_fft(padding_, f_.zero());
-    // Blas<Field>::clear(padding_, &x_fft[0], 1, f_);
     Blas<Field>::copy(n_, &x_fft[0], 1, x, 1);
-    FFT<Field>::fft(&x_fft[0], padding_, omega_, omega_order_, f_);
-    // Multiply FFTs together.
+    FFT<Field>::fftf(&x_fft[0], padding_, omega_, omega_order_, f_);
+    // Pointwise multiplication.
     for (size_t i = 0; i < padding_; ++i) {
       f_.mul(x_fft[i], y_fft_[i]);
     }
-    // Take inverse fft.
-    FFT<Field>::fft(&x_fft[0], padding_, f_.invertf(omega_), omega_order_, f_);
+    // Backward fft.
+    FFT<Field>::fftb(&x_fft[0], padding_, omega_, omega_order_, f_);
     Blas<Field>::copy(m_, z, 1, &x_fft[0], 1);
   }
 
@@ -135,9 +131,9 @@ class FFTExtConvolution {
   using EltExt = typename FieldExt::Elt;
 
  public:
-  FFTExtConvolution(size_t n, size_t m, const Field& f,
-                      const FieldExt& f_ext, const EltExt omega,
-                      uint64_t omega_order, const Elt y[/*m*/])
+  FFTExtConvolution(size_t n, size_t m, const Field& f, const FieldExt& f_ext,
+                    const EltExt omega, uint64_t omega_order,
+                    const Elt y[/*m*/])
       : f_(f),
         f_ext_(f_ext),
         omega_(omega),
@@ -145,41 +141,38 @@ class FFTExtConvolution {
         n_(n),
         m_(m),
         padding_(choose_padding(m)),
-        y_fft_(padding_, f_ext_.zero()) {
-    // First pad y
-    for (size_t i = 0; i < m; ++i) {
-      y_fft_[i] = f_ext_.of_scalar(y[i]);
-    }
-    // take fft of inverses
-    FFT<FieldExt>::fft(&y_fft_[0], padding_, omega_, omega_order_, f_ext_);
-    // To compute the inverse fft, we must divide by the padding
-    EltExt inverse_padding = f_ext_.invertf(f_ext_.of_scalar(padding_));
-    for (size_t i = 0; i < padding_; ++i) {
-      f_ext_.mul(y_fft_[i], inverse_padding);
-    }
+        y_fft_(padding_, f_.zero()) {
+    Blas<Field>::copy(m, &y_fft_[0], 1, y, 1);
+    RFFT<FieldExt>::r2hc(&y_fft_[0], padding_, omega_, omega_order_, f_ext_);
+
+    // Pre-scale Y by 1/N to compensate for the scaling in HC2R(R2HC(.))
+    Blas<Field>::scale(padding_, &y_fft_[0], 1,
+                       f_.invertf(f_.of_scalar(padding_)), f_);
   }
 
   // Computes (first m entries of) convolution of x with y, stores in z:
   // z[k] = \sum_{i=0}^{n-1} x[i] y[k-i].
   // Note that y has already been FFT'd and divided by padding_ in constructor
   void convolution(const Elt x[/*n_*/], Elt z[/*m_*/]) const {
-    std::vector<EltExt> x_ext_fft(padding_, f_ext_.zero());
-    for (size_t i = 0; i < n_; ++i) {
-      x_ext_fft[i] = f_ext_.of_scalar(x[i]);
+    std::vector<Elt> x_fft(padding_, f_.zero());
+    Blas<Field>::copy(n_, &x_fft[0], 1, x, 1);
+    RFFT<FieldExt>::r2hc(&x_fft[0], padding_, omega_, omega_order_, f_ext_);
+
+    // Pointwise multiplication
+    {
+      size_t i;
+      f_.mul(x_fft[0], y_fft_[0]);  // DC is real
+      for (i = 1; i + i < padding_; ++i) {
+        RFFT<FieldExt>::cmul(&x_fft[i], &x_fft[padding_ - i], x_fft[i],
+                             x_fft[padding_ - i], y_fft_[i],
+                             y_fft_[padding_ - i], f_);
+      }
+      f_.mul(x_fft[i], y_fft_[i]);  // Nyquist is real
     }
-    FFT<FieldExt>::fft(&x_ext_fft[0], padding_, omega_, omega_order_, f_ext_);
-    // Multiply FFTs together.
-    for (size_t i = 0; i < padding_; ++i) {
-      f_ext_.mul(x_ext_fft[i], y_fft_[i]);
-    }
-    // Take inverse fft.
-    FFT<FieldExt>::fft(&x_ext_fft[0], padding_, f_ext_.invertf(omega_),
-                        omega_order_, f_ext_);
-    for (size_t i = 0; i < m_; ++i) {
-      check(f_ext_.is_real(x_ext_fft[i]),
-            "non-zero complex component after FFT");
-      z[i] = f_ext_.real(x_ext_fft[i]);
-    }
+
+    // Backward FFT.
+    RFFT<FieldExt>::hc2r(&x_fft[0], padding_, omega_, omega_order_, f_ext_);
+    Blas<Field>::copy(m_, z, 1, &x_fft[0], 1);
   }
 
  private:
@@ -195,7 +188,7 @@ class FFTExtConvolution {
 
   // fft(y[i]) / padding
   // padded with zeroes to the next power of 2 at least m.
-  std::vector<EltExt> y_fft_;
+  std::vector<Elt> y_fft_;
 };
 
 template <class Field, class FieldExt>
@@ -207,7 +200,7 @@ class FFTExtConvolutionFactory {
   using Convolver = FFTExtConvolution<Field, FieldExt>;
 
   FFTExtConvolutionFactory(const Field& f, const FieldExt& f_ext,
-                              const EltExt omega, uint64_t omega_order)
+                           const EltExt omega, uint64_t omega_order)
       : f_(f), f_ext_(f_ext), omega_(omega), omega_order_(omega_order) {}
 
   std::unique_ptr<const Convolver> make(size_t n, size_t m,

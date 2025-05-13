@@ -60,9 +60,8 @@ TEST(FFT, Inverse) {
     A[i] = rng.next();
   }
   std::vector<Elt> B(A);
-  FFT<Field>::fft(&A[0], n, omega, omega_order, F);
-  F.invert(omega);
-  FFT<Field>::fft(&A[0], n, omega, omega_order, F);
+  FFT<Field>::fftf(&A[0], n, omega, omega_order, F);
+  FFT<Field>::fftb(&A[0], n, omega, omega_order, F);
   for (size_t i = 0; i < n; ++i) {
     F.mul(A[i], F.invertf(F.of_scalar(n)));
   }
@@ -83,9 +82,9 @@ TEST(FFT, Linear) {
     B[i] = rng.next();
     C[i] = F.addf(F.mulf(k0, A[i]), F.mulf(k1, B[i]));
   }
-  FFT<Field>::fft(&A[0], n, omega, omega_order, F);
-  FFT<Field>::fft(&B[0], n, omega, omega_order, F);
-  FFT<Field>::fft(&C[0], n, omega, omega_order, F);
+  FFT<Field>::fftf(&A[0], n, omega, omega_order, F);
+  FFT<Field>::fftf(&B[0], n, omega, omega_order, F);
+  FFT<Field>::fftf(&C[0], n, omega, omega_order, F);
   for (size_t i = 0; i < n; ++i) {
     EXPECT_EQ(C[i], F.addf(F.mulf(k0, A[i]), F.mulf(k1, B[i])));
   }
@@ -105,9 +104,9 @@ TEST(FFT, Impulse) {
     C[i] = F.addf(F.mulf(k0, A[i]), F.mulf(k1, B[i]));  // k0 * A[i] + k1 * B[i]
   }
 
-  FFT<Field>::fft(&A[0], n, omega, omega_order, F);
-  FFT<Field>::fft(&B[0], n, omega, omega_order, F);
-  FFT<Field>::fft(&C[0], n, omega, omega_order, F);
+  FFT<Field>::fftf(&A[0], n, omega, omega_order, F);
+  FFT<Field>::fftf(&B[0], n, omega, omega_order, F);
+  FFT<Field>::fftf(&C[0], n, omega, omega_order, F);
   for (size_t i = 0; i < n; ++i) {
     EXPECT_EQ(C[i], F.addf(F.mulf(k0, A[i]), F.mulf(k1, B[i])));
   }
@@ -137,9 +136,9 @@ TEST(FFT, Shift) {
     C[i] = F.addf(F.mulf(k0, A[(i + 1) % n]), F.mulf(k1, B[i]));
   }
 
-  FFT<Field>::fft(&A[0], n, omega, omega_order, F);
-  FFT<Field>::fft(&B[0], n, omega, omega_order, F);
-  FFT<Field>::fft(&C[0], n, omega, omega_order, F);
+  FFT<Field>::fftb(&A[0], n, omega, omega_order, F);
+  FFT<Field>::fftb(&B[0], n, omega, omega_order, F);
+  FFT<Field>::fftb(&C[0], n, omega, omega_order, F);
   Elt w = F.one();
   EXPECT_EQ(w, reroot(omega_n, n, 1, F));
   for (size_t i = 0; i < n; ++i) {
@@ -171,7 +170,7 @@ void BM_FFTFp2(benchmark::State& state) {
     A[i] = F.of_scalar(rng.next());
   }
   for (auto _ : state) {
-    FFT<Field>::fft(&A[0], N, OMEGA31, 1u << 31, F);
+    FFT<Field>::fftb(&A[0], N, OMEGA31, 1u << 31, F);
   }
 }
 BENCHMARK(BM_FFTFp2)
@@ -192,7 +191,7 @@ void BM_FFT_Fp128(benchmark::State& state) {
     A[i] = rng.next();
   }
   for (auto _ : state) {
-    FFT<Field>::fft(&A[0], N, omega, omega_order, F);
+    FFT<Field>::fftb(&A[0], N, omega, omega_order, F);
   }
 }
 
@@ -220,7 +219,7 @@ void BM_FFT_F64_2(benchmark::State& state) {
   }
 
   for (auto _ : state) {
-    FFT<Field>::fft(&A[0], N, omega, kSmallOrder, F2);
+    FFT<Field>::fftb(&A[0], N, omega, kSmallOrder, F2);
   }
 }
 
@@ -244,7 +243,7 @@ void BM_FFT_F64(benchmark::State& state) {
   }
 
   for (auto _ : state) {
-    FFT<Field>::fft(&A[0], N, omega, kSmallOrder, F);
+    FFT<Field>::fftb(&A[0], N, omega, kSmallOrder, F);
   }
 }
 
