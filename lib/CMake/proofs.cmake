@@ -29,7 +29,7 @@ macro(proofs_add_testing_libraries PROG)
 
     # on Debian buster, gtest seems to need pthread
     target_link_libraries(${PROG} gtest pthread)
-    target_link_libraries(${PROG} benchmark)
+    target_link_libraries(${PROG} benchmark::benchmark)
 
     gtest_discover_tests(${PROG})
 endmacro()
