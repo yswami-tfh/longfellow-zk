@@ -12,6 +12,9 @@ The Longfellow library enables the construction of  zero-knowledge protocols con
 
 It is named after the bridge outside the Google Cambridge office.
 
+# Testing via devcontainer
+You can quickly test our library by using the associated devcontainer to create its environment. Simply click on `Code`-->`Codespaces`-->`Create codespace on master` above to get started.  This creates a docker container on a Github server that includes all of the dependencies and provides a web-based VScode interface to our current codebase.  You can compile and run our benchmarks in this environment, but some of them may be slower than our reported values due to the VM.
+
 # Instructions to build
 
 ## Requirements
