@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,7 +50,6 @@ TEST(mdoc, mdoc_revocation_list_test) {
 
   constexpr size_t kListSize = 50000;
 
-  size_t ninput;
   std::unique_ptr<Circuit<Fp256Base>> CIRCUIT;
 
   // ======== compile time =========================
@@ -77,7 +76,6 @@ TEST(mdoc, mdoc_revocation_list_test) {
 
     CIRCUIT = Q.mkcircuit(/*nc=*/1);
     dump_info("mdoc revocation list", Q);
-    ninput = Q.ninput();
     log(INFO, "Compile done");
   }
 

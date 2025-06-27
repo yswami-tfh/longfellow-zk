@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@
 #include "circuits/logic/compiler_backend.h"
 #include "circuits/logic/evaluation_backend.h"
 #include "circuits/logic/logic.h"
+#include "ec/p256.h"
 #include "gf2k/gf2_128.h"
 #include "sumcheck/circuit.h"
 #include "sumcheck/prover.h"
@@ -35,16 +36,12 @@ namespace {
 typedef GF2_128<> Field;
 const Field F;
 
-using CompilerBackend = CompilerBackend<Field>;
-using LogicCircuit = Logic<Field, CompilerBackend>;
-using BitWC = LogicCircuit::BitW;
-
-using EvaluationBackend = EvaluationBackend<Field>;
-using Logic = Logic<Field, EvaluationBackend>;
-using BitW = Logic::BitW;
-
 std::unique_ptr<Circuit<Field>> mk_add_circuit(size_t w, size_t nc,
                                                size_t kind) {
+  using CompilerBackend = CompilerBackend<Field>;
+  using LogicCircuit = Logic<Field, CompilerBackend>;
+  using BitWC = LogicCircuit::BitW;
+
   QuadCircuit<Field> Q(F);
   const CompilerBackend cbk(&Q);
   const LogicCircuit LC(&cbk, F);
@@ -90,6 +87,8 @@ std::unique_ptr<Circuit<Field>> mk_add_circuit(size_t w, size_t nc,
 }
 
 TEST(Logic_Circuit, AddSub) {
+  using EvaluationBackend = EvaluationBackend<Field>;
+  using Logic = Logic<Field, EvaluationBackend>;
   const EvaluationBackend ebk(F);
   const Logic L(&ebk, F);
   set_log_level(INFO);
@@ -136,9 +135,12 @@ TEST(Logic_Circuit, AddSubSize) {
   }
 }
 
-std::unique_ptr<Circuit<Field>> mk_multiplier_circuit(
-    size_t w, size_t nc, bool gf2_polynomial_multiplier) {
+std::unique_ptr<Circuit<Field>> mk_multiplier_circuit(size_t w, size_t nc) {
   QuadCircuit<Field> Q(F);
+  using CompilerBackend = CompilerBackend<Field>;
+  using LogicCircuit = Logic<Field, CompilerBackend>;
+  using BitWC = LogicCircuit::BitW;
+
   const CompilerBackend cbk(&Q);
   const LogicCircuit LC(&cbk, F);
 
@@ -151,26 +153,20 @@ std::unique_ptr<Circuit<Field>> mk_multiplier_circuit(
   for (size_t i = 0; i < w; ++i) {
     b[i] = BitWC(Q.input(), F);
   }
-
-  const char* name;
-  if (gf2_polynomial_multiplier) {
-    LC.gf2_polynomial_multiplier(w, c.data(), a.data(), b.data());
-    name = "gf2_polynomial_multiplier";
-  } else {
-    LC.multiplier(w, c.data(), a.data(), b.data());
-    name = "multiplier";
-  }
+  LC.multiplier(w, c.data(), a.data(), b.data());
   for (size_t i = 0; i < 2 * w; ++i) {
     Q.output(LC.eval(c[i]), i);
   }
-
   auto CIRCUIT = Q.mkcircuit(nc);
-  dump_info<Field>(name, w, Q);
-
+  dump_info<Field>("multiplier", w, Q);
   return CIRCUIT;
 }
 
 TEST(Logic_Circuit, Multiplier) {
+  using EvaluationBackend = EvaluationBackend<Field>;
+  using Logic = Logic<Field, EvaluationBackend>;
+  using BitW = Logic::BitW;
+
   const EvaluationBackend ebk(F);
   const Logic L(&ebk, F);
   set_log_level(INFO);
@@ -178,8 +174,7 @@ TEST(Logic_Circuit, Multiplier) {
 
   // for all widths w x w -> 2w
   for (size_t w = 1; w <= 8; ++w) {
-    auto CIRCUIT =
-        mk_multiplier_circuit(w, nc, /*gf2_polynomial_multiplier=*/false);
+    auto CIRCUIT = mk_multiplier_circuit(w, nc);
 
     // Test 1: verify the circuit for all w-bit boolean inputs
     // a and b
@@ -235,6 +230,10 @@ TEST(Logic_Circuit, Multiplier) {
 }
 
 TEST(Logic_Circuit, Comparison) {
+  using CompilerBackend = CompilerBackend<Field>;
+  using LogicCircuit = Logic<Field, CompilerBackend>;
+  using BitWC = LogicCircuit::BitW;
+
   set_log_level(INFO);
   for (size_t kind = 0; kind < 3; ++kind) {
     for (size_t n = 1; n <= 64; ++n) {
@@ -274,32 +273,57 @@ TEST(Logic_Circuit, Comparison) {
   }
 }
 
-TEST(Logic_Circuit, GF2MultiplierSize) {
-  set_log_level(INFO);
-  constexpr size_t nc = 1;
-
-  for (size_t w = 127; w <= 129; ++w) {
-    // for the side-effect of logging the circuit size
-    (void)mk_multiplier_circuit(w, nc, /*gf2_polynomial_multiplier=*/true);
+template <class Field>
+void mk_gf2_polymul(size_t w, const Field& f) {
+  QuadCircuit<Field> Q(f);
+  const CompilerBackend<Field> cbk(&Q);
+  using LogicCircuit = Logic<Field, CompilerBackend<Field>>;
+  const LogicCircuit LC(&cbk, f);
+  typename LogicCircuit::v128 a, b;
+  typename LogicCircuit::v256 c2;
+  for (size_t i = 0; i < w; ++i) {
+    a[i] = LC.input();
+    b[i] = LC.input();
   }
+  LC.gf2_polynomial_multiplier_karat(w, c2.data(), a.data(), b.data());
+  for (size_t i = 0; i < 2 * w; ++i) {
+    Q.output(LC.eval(c2[i]), i);
+  }
+  auto CIRCUIT = Q.mkcircuit(1);
+  dump_info<Field>("GF2^k mul", w, Q);
 }
 
-void mk_gf2_modmul(size_t w) {
-  QuadCircuit<Field> Q(F);
-  const CompilerBackend cbk(&Q);
-  const LogicCircuit LC(&cbk, F);
+TEST(Logic_Circuit, GF2k_PolymultSize_p256) {
+  mk_gf2_polymul<Fp256Base>(128, p256_base);
+  mk_gf2_polymul<Fp256Base>(64, p256_base);
+  mk_gf2_polymul<Fp256Base>(32, p256_base);
+  mk_gf2_polymul<Fp256Base>(16, p256_base);
+  mk_gf2_polymul<Fp256Base>(8, p256_base);
+  mk_gf2_polymul<Fp256Base>(4, p256_base);
+}
 
-  LogicCircuit::v128 a = LC.vinput<128>(), b = LC.vinput<128>(), c;
+TEST(Logic_Circuit, GF2k_PolymultSizeSize) { mk_gf2_polymul<Field>(128, F); }
+
+template <class Field>
+void mk_gf2_modmul(size_t w, const Field& f) {
+  QuadCircuit<Field> Q(f);
+  const CompilerBackend<Field> cbk(&Q);
+  using LogicCircuit = Logic<Field, CompilerBackend<Field>>;
+  const LogicCircuit LC(&cbk, f);
+  typename LogicCircuit::v128 a = LC.template vinput<128>(),
+                              b = LC.template vinput<128>(), c;
   LC.gf2_128_mul(c, a, b);
   LC.voutput(c, 0);
-
   auto CIRCUIT = Q.mkcircuit(1);
-  dump_info<Field>("GF 2^128", w, Q);
+  dump_info<Field>("GF_2^128 modmul", w, Q);
 }
 
-TEST(Logic_Circuit, GF2k_ModularMultiplierSize) {
-  mk_gf2_modmul(128);
+TEST(Logic_Circuit, GF2k_ModmulSize_p256) {
+  mk_gf2_modmul<Fp256Base>(128, p256_base);
 }
+
+TEST(Logic_Circuit, GF2k_ModmulSize) { mk_gf2_modmul<Field>(128, F); }
+
 
 }  // namespace
 }  // namespace proofs

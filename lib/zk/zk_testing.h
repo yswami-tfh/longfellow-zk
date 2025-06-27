@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@
 #include "random/transcript.h"
 #include "sumcheck/circuit.h"
 #include "util/log.h"
+#include "util/readbuffer.h"
 #include "zk/zk_proof.h"
 #include "zk/zk_prover.h"
 #include "zk/zk_verifier.h"
@@ -57,7 +58,7 @@ void run2_test_zk(const Circuit<Field>& circuit, Dense<Field>& W,
 
   ZkProof<Field> zkpr(circuit, kLigeroRate, kLigeroNreq);
 
-  Transcript tp((uint8_t *)"zk_test", 7);
+  Transcript tp((uint8_t*)"zk_test", 7);
   SecureRandomEngine rng;
   ZkProver<Field, RSFactory> prover(circuit, base, rsf);
   prover.commit(zkpr, W, tp, rng);
@@ -71,12 +72,12 @@ void run2_test_zk(const Circuit<Field>& circuit, Dense<Field>& W,
   // ======= run verifier =============
   // Re-parse the proof to simulate a different client.
   ZkProof<Field> zkpv(circuit, kLigeroRate, kLigeroNreq);
-  std::vector<uint8_t>::const_iterator zi = zbuf.cbegin();
-  EXPECT_TRUE(zkpv.read(zi, zbuf.end(), base));
+  ReadBuffer rb(zbuf);
+  EXPECT_TRUE(zkpv.read(rb, base));
 
   ZkVerifier<Field, RSFactory> verifier(circuit, rsf, kLigeroRate, kLigeroNreq,
                                         base);
-  Transcript tv((uint8_t *)"zk_test", 7);
+  Transcript tv((uint8_t*)"zk_test", 7);
   verifier.recv_commitment(zkpv, tv);
   EXPECT_TRUE(verifier.verify(zkpv, pub, tv));
   log(INFO, "ZK Verify done");
@@ -101,7 +102,7 @@ void run_failing_test_zk2(const Circuit<Field>& circuit, Dense<Field>& W,
 
   ZkProof<Field> zkpr(circuit, kLigeroRate, kLigeroNreq);
 
-  Transcript tp((uint8_t *)"zk_test", 7);
+  Transcript tp((uint8_t*)"zk_test", 7);
   SecureRandomEngine rng;
   ZkProver<Field, RSFactory> prover(circuit, base, rsf);
   prover.commit(zkpr, W, tp, rng);
@@ -122,7 +123,7 @@ void run_test_zk(const Circuit<Field>& circuit, Dense<Field>& W,
 
   ZkProof<Field> zkpr(circuit, kLigeroRate, kLigeroNreq);
 
-  Transcript tp((uint8_t *)"zk_test", 7);
+  Transcript tp((uint8_t*)"zk_test", 7);
   SecureRandomEngine rng;
   ZkProver<Field, RSFactory> prover(circuit, F, rsf);
   prover.commit(zkpr, W, tp, rng);
@@ -137,15 +138,15 @@ void run_test_zk(const Circuit<Field>& circuit, Dense<Field>& W,
   // ======= zk verifier =============
   // Re-parse the proof to simulate a different client.
   ZkProof<Field> zkpv(circuit, kLigeroRate, kLigeroNreq);
-  std::vector<uint8_t>::const_iterator zi = zbuf.begin();
-  EXPECT_TRUE(zkpv.read(zi, zbuf.end(), F));
+  ReadBuffer rb(zbuf);
+  EXPECT_TRUE(zkpv.read(rb, F));
 
   ZkVerifier<Field, RSFactory> verifier(circuit, rsf, kLigeroRate, kLigeroNreq,
                                         F);
-  Transcript tv((uint8_t *)"zk_test", 7);
+  Transcript tv((uint8_t*)"zk_test", 7);
   verifier.recv_commitment(zkpv, tv);
   EXPECT_TRUE(verifier.verify(zkpv, pub, tv));
-};
+}
 
 }  // namespace proofs
 

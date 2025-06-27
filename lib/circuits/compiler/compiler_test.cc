@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ TEST(Compiler, OutputAnInput) {
 
   auto CIRCUIT = Q.mkcircuit(1);
   EXPECT_EQ(Q.nwires_,
-            /*one=*/1 + /*inputs=*/3 + /*mul(b,c)=*/1 + /*copy(a)*/ 1);
+            /*one=*/1u + /*inputs=*/3u + /*mul(b,c)=*/1u + /*copy(a)*/ 1u);
 }
 
 TEST(Compiler, AliasOfLinearAndCopyWire) {
@@ -58,7 +58,7 @@ TEST(Compiler, AliasOfLinearAndCopyWire) {
   auto CIRCUIT = Q.mkcircuit(1);
   dump_info<Field>("AliasOfLinearAndCopyWire", Q);
   EXPECT_EQ(Q.nwires_,
-            /*one*/ 1 + /*a*/ 1 + /*copy of a at d=2*/ 1 + /*linear(a)=*/1);
+            /*one*/ 1u + /*a*/ 1u + /*copy of a at d=2*/ 1u + /*linear(a)=*/1u);
 }
 
 TEST(Compiler, Assert0) {
@@ -100,10 +100,10 @@ TEST(Compiler, Output0) {
   auto CIRCUIT = Q.mkcircuit(nc);
   dump_info<Field>("output0", Q);
 
-  EXPECT_EQ(Q.ninput_, 1);
-  EXPECT_EQ(Q.noutput_, 1);
-  EXPECT_EQ(Q.nwires_, 1);
-  EXPECT_EQ(Q.nquad_terms_, 0);
+  EXPECT_EQ(Q.ninput_, 1u);
+  EXPECT_EQ(Q.noutput_, 1u);
+  EXPECT_EQ(Q.nwires_, 1u);
+  EXPECT_EQ(Q.nquad_terms_, 0u);
 }
 
 }  // namespace

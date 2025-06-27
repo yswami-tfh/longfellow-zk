@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,6 +49,7 @@
 #include "util/crypto.h"
 #include "util/log.h"
 #include "util/panic.h"
+#include "util/readbuffer.h"
 #include "zk/zk_proof.h"
 #include "zk/zk_prover.h"
 #include "zk/zk_verifier.h"
@@ -146,13 +147,10 @@ struct ProverState {
 // Fills the hash witness with the attributes and the time input.
 void fill_attributes(DenseFiller<f_128> &hash_filler,
                      const RequestedAttribute *attrs, size_t attrs_len,
-                     const uint8_t *now, const f_128 &Fs) {
+                     const uint8_t *now, const f_128 &Fs, size_t version = 2) {
   hash_filler.push_back(Fs.one());
   for (size_t ai = 0; ai < attrs_len; ++ai) {
-    size_t aLen = attrs[ai].id_len;
-    size_t vLen = attrs[ai].value_len;
-    fill_bit_string(hash_filler, attrs[ai].id, aLen, 32, Fs);
-    fill_bit_string(hash_filler, attrs[ai].value, vLen, 64, Fs);
+    fill_attribute(hash_filler, attrs[ai], Fs, version);
   }
   fill_bit_string(hash_filler, now, 20, 20, Fs);
 }
@@ -174,8 +172,8 @@ void fill_public_inputs(DenseFiller<Fp256Base> &sig_filler,
                         const RequestedAttribute *attrs, size_t attrs_len,
                         const uint8_t *now, const uint8_t *docType,
                         size_t dt_len, const gf2k macs[], gf2k av,
-                        const f_128 &Fs) {
-  fill_attributes(hash_filler, attrs, attrs_len, now, Fs);
+                        const f_128 &Fs, size_t version = 2) {
+  fill_attributes(hash_filler, attrs, attrs_len, now, Fs, version);
 
   for (size_t i = 0; i < 6; ++i) { /* 6 mac + 1 av */
     fill_gf2k<f_128, f_128>(macs[i], hash_filler, Fs);
@@ -193,15 +191,6 @@ void fill_public_inputs(DenseFiller<Fp256Base> &sig_filler,
   fill_gf2k<f_128, Fp256Base>(av, sig_filler, p256_base);
 }
 
-void open_to_requested_attribute(const RequestedAttribute &attr,
-                                 OpenedAttribute &oa) {
-  check(sizeof(RequestedAttribute) == sizeof(OpenedAttribute),
-        "RequestedAttribute and OpenedAttribute are out of sync");
-  oa.id_len = attr.id_len;
-  oa.value_len = attr.value_len;
-  memcpy(oa.id, attr.id, attr.id_len);
-  memcpy(oa.value, attr.value, attr.value_len);
-}
 
 // Fills the hash and signature public inputs and private witnesses.
 bool fill_witness(DenseFiller<Fp256Base> &fill_b, DenseFiller<f_128> &fill_s,
@@ -209,7 +198,8 @@ bool fill_witness(DenseFiller<Fp256Base> &fill_b, DenseFiller<f_128> &fill_s,
                   const Elt &pkY, const uint8_t *tr, size_t tr_len,
                   const RequestedAttribute *attrs, size_t attrs_len,
                   const uint8_t *now, ProverState &state,
-                  SecureRandomEngine &rng, const f_128 &Fs) {
+                  SecureRandomEngine &rng, const f_128 &Fs,
+                  size_t version = 2) {
   using MdocHW = MdocHashWitness<P256, f_128>;
   using MdocSW = MdocSignatureWitness<P256, Fp256Scalar>;
 
@@ -218,19 +208,15 @@ bool fill_witness(DenseFiller<Fp256Base> &fill_b, DenseFiller<f_128> &fill_s,
   auto sw = std::make_unique<MdocSW>(p256, p256_scalar, Fs);
 
   // hash public inputs
-  fill_attributes(fill_s, attrs, attrs_len, now, Fs);
+  fill_attributes(fill_s, attrs, attrs_len, now, Fs, version);
 
   // init mac+av to 0
   for (size_t i = 0; i < 6 + 1; ++i) { /* 6 mac + 1 av */
     fill_gf2k<f_128, f_128>(Fs.zero(), fill_s, Fs);
   }
 
-  std::vector<OpenedAttribute> attrs_vec(attrs_len);
-  for (size_t ai = 0; ai < attrs_len; ++ai) {
-    open_to_requested_attribute(attrs[ai], attrs_vec[ai]);
-  }
-  bool ok_h = hw->compute_witness(mdoc, mdoc_len, tr, tr_len, attrs_vec.data(),
-                                  attrs_len, now);
+  bool ok_h = hw->compute_witness(mdoc, mdoc_len, tr, tr_len, attrs,
+                                  attrs_len, now, version);
   bool ok_s = sw->compute_witness(pkX, pkY, mdoc, mdoc_len, tr, tr_len);
   if (!ok_h || !ok_s) return false;
 
@@ -500,21 +486,17 @@ MdocProverErrorCode run_mdoc_prover(
     return MDOC_PROVER_CIRCUIT_PARSING_FAILURE;
   }
 
-  // For now, we are not using the ZKSpec version anywhere and assuming no
-  // backwards compatibility. As soon as we have a use case for it, we have to
-  // pass the ZkSpecStruct to all required downstream functions.
   log(INFO, "bytes len: %zu", full_size);
-  auto zi = bytes.cbegin();
+  ReadBuffer rb_circuit(bytes.data(), full_size);
 
   CircuitRep<Fp256Base> cr_s(p256_base, P256_ID);
-  auto c_sig = cr_s.from_bytes(zi, full_size);
+  auto c_sig = cr_s.from_bytes(rb_circuit);
   if (c_sig == nullptr) {
     log(ERROR, "signature circuit could not be parsed");
     return MDOC_PROVER_CIRCUIT_PARSING_FAILURE;
   }
-  full_size -= (zi - bytes.begin()); /* guaranteed not to underflow */
   CircuitRep<f_128> cr_h(Fs, GF2_128_ID);
-  auto c_hash = cr_h.from_bytes(zi, full_size);
+  auto c_hash = cr_h.from_bytes(rb_circuit);
 
   if (c_hash == nullptr) {
     log(ERROR, "hash circuit could not be parsed");
@@ -530,9 +512,9 @@ MdocProverErrorCode run_mdoc_prover(
 
   SecureRandomEngine rng;
   ProverState state;
-  bool ok = fill_witness(sig_filler, hash_filler, mdoc, mdoc_len, pkX, pkY,
-                         transcript, tr_len, attrs, attrs_len,
-                         (const uint8_t *)now, state, rng, Fs);
+  bool ok = fill_witness(
+      sig_filler, hash_filler, mdoc, mdoc_len, pkX, pkY, transcript, tr_len,
+      attrs, attrs_len, (const uint8_t *)now, state, rng, Fs, zk_spec->version);
   if (!ok) {
     log(ERROR, "fill_witness failed");
     return MDOC_PROVER_WITNESS_CREATION_FAILURE;
@@ -643,17 +625,16 @@ MdocVerifierErrorCode run_mdoc_verifier(
   // pass the ZkSpecStruct to all required downstream functions.
   log(INFO, "bytes len: %zu", full_size);
 
-  auto zb = bytes.cbegin();
+  ReadBuffer rb_circuit(bytes.data(), full_size);
   CircuitRep<Fp256Base> cr_s(p256_base, P256_ID);
-  auto c_sig = cr_s.from_bytes(zb, full_size);
+  auto c_sig = cr_s.from_bytes(rb_circuit);
   if (c_sig == nullptr) {
     log(ERROR, "signature circuit could not be parsed");
     return MDOC_VERIFIER_CIRCUIT_PARSING_FAILURE;
   }
-  full_size -= (zb - bytes.begin());  // guaranteed not to underflow
 
   CircuitRep<f_128> cr_h(Fs, GF2_128_ID);
-  auto c_hash = cr_h.from_bytes(zb, full_size);
+  auto c_hash = cr_h.from_bytes(rb_circuit);
 
   if (c_hash == nullptr) {
     log(ERROR, "circuit could not be parsed");
@@ -666,25 +647,23 @@ MdocVerifierErrorCode run_mdoc_verifier(
   ZkProof<f_128> pr_hash(*c_hash, kLigeroRate, kLigeroNreq);
   ZkProof<Fp256Base> pr_sig(*c_sig, kLigeroRate, kLigeroNreq);
 
-
   const std::vector<uint8_t> zbuf(zkproof, zkproof + proof_len);
-  auto zi = zbuf.begin();
+  ReadBuffer rb(zbuf);
 
   // Read macs from proof string.
   // The sanity check above ensures that the proof is big enough for the MACs.
   gf2k macs[6];
 
   for (size_t i = 0; i < 6; ++i) {
-    macs[i] = Fs.of_bytes_field(&zbuf[i * f_128::kBytes]).value();
-    zi += f_128::kBytes;
+    macs[i] = Fs.of_bytes_field(rb.next(f_128::kBytes)).value();
   }
 
   // The proof read methods check proof length internally.
-  if (!pr_hash.read(zi, zbuf.end(), Fs)) {
+  if (!pr_hash.read(rb, Fs)) {
     log(ERROR, "hash proof could not be parsed");
     return MDOC_VERIFIER_HASH_PARSING_FAILURE;
   };
-  if (!pr_sig.read(zi, zbuf.end(), p256_base)) {
+  if (!pr_sig.read(rb, p256_base)) {
     log(ERROR, "sig proof could not be parsed");
     return MDOC_VERIFIER_SIGNATURE_PARSING_FAILURE;
   }
@@ -720,7 +699,8 @@ MdocVerifierErrorCode run_mdoc_verifier(
   size_t dlen = strlen(docType);
   fill_public_inputs(sig_filler, hash_filler, pkX, pkY, transcript, tr_len,
                      attrs, attrs_len, (const uint8_t *)now,
-                     (const uint8_t *)docType, dlen, macs, av, Fs);
+                     (const uint8_t *)docType, dlen, macs, av, Fs,
+                     zk_spec->version);
 
   if (hash_filler.size() != c_hash->npub_in ||
       sig_filler.size() != c_sig->npub_in) {
@@ -745,9 +725,9 @@ int circuit_id(uint8_t id[/*kSHA256DigestSize*/], const uint8_t *bcp,
   std::vector<uint8_t> bytes(len);
   size_t full_size = decompress(bytes, len, bcp, bcsz);
 
-  auto zb = bytes.cbegin();
+  ReadBuffer rb_circuit(bytes.data(), full_size);
   CircuitRep<Fp256Base> cr_s(p256_base, P256_ID);
-  auto c_sig = cr_s.from_bytes(zb, full_size);
+  auto c_sig = cr_s.from_bytes(rb_circuit);
   if (c_sig == nullptr) {
     log(ERROR, "signature circuit could not be parsed");
     return 0;
@@ -755,20 +735,17 @@ int circuit_id(uint8_t id[/*kSHA256DigestSize*/], const uint8_t *bcp,
   circuit_id(cid, *c_sig, p256_base);
   sha.Update(cid, kSHA256DigestSize);
 
-  size_t len2 = full_size - (zb - bytes.begin());  // will not underflow
-
   const f_128 Fs;
-
   CircuitRep<f_128> cr_h(Fs, GF2_128_ID);
-  auto c_hash = cr_h.from_bytes(zb, len2);
+  auto c_hash = cr_h.from_bytes(rb_circuit);
   if (c_hash == nullptr) {
     log(ERROR, "circuit could not be parsed");
     return 0;
   }
 
-  if (full_size != (zb - bytes.begin())) {
-    size_t fff = full_size - (zb - bytes.begin());
-    log(ERROR, "circuit bytes contains extra data: %zu bytes", fff);
+  size_t remaining = rb_circuit.remaining();
+  if (remaining != 0) {
+    log(ERROR, "circuit bytes contains extra data: %zu bytes", remaining);
     return 0;
   }
 

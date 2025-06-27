@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,17 +34,17 @@
 
 namespace proofs {
 namespace {
-const Fp<4> f(
+const Fp<4> F(
     "21888242871839275222246405745257275088548364400416034343698204186575808495"
     "617");
-const Fp<1> g("18446744069414584321");
+const Fp<1> G("18446744069414584321");
 
-const auto omegaf = f.of_string(
+const auto omegaf = F.of_string(
     "19103219067921713944291392827692070036145651957329286315305642004821462161"
     "904");
 const uint64_t omegaf_order = 1ull << 28;
 
-const auto omegag = g.of_string("1753635133440165772");
+const auto omegag = G.of_string("1753635133440165772");
 const uint64_t omegag_order = 1ull << 32;
 
 static constexpr size_t N = 37;  // Degree 36 polynomial
@@ -103,7 +103,7 @@ class SlowConvolutionFactory {
 
 template <class Field>
 void one_field_reed_solomon(const typename Field::Elt& omega,
-                            uint64_t omega_order, const Field& F) {
+                            uint64_t omega_order, const Field& f) {
   using Elt = typename Field::Elt;
 
   using Interpolation = Interpolation<N, Field>;
@@ -111,18 +111,18 @@ void one_field_reed_solomon(const typename Field::Elt& omega,
   using SlowConvolutionFactory = SlowConvolutionFactory<Field>;
   using Poly = Poly<N, Field>;  // N-tuple, i.e., at most N-1 degree polynomial
 
-  Bogorng<Field> rng(&F);
+  Bogorng<Field> rng(&f);
   Poly P;
   // arbitrary coefficients
   for (size_t i = 0; i < N; ++i) {
-    P[i] = F.of_scalar(i * i * i + (i & 0xF) + (i ^ (i << 2)));
+    P[i] = f.of_scalar(i * i * i + (i & 0xF) + (i ^ (i << 2)));
   }
 
   // lagrange basis, i.e., values at first M points
   std::vector<Elt> L(M);
   for (size_t i = 0; i < M; ++i) {
-    Elt x = F.of_scalar(i);
-    L[i] = Interpolation::eval_monomial(P, x, F);
+    Elt x = f.of_scalar(i);
+    L[i] = Interpolation::eval_monomial(P, x, f);
   }
 
   std::vector<Elt> L2(M);
@@ -130,8 +130,8 @@ void one_field_reed_solomon(const typename Field::Elt& omega,
     L2[i] = L[i];
   }
 
-  FFTConvolutionFactory factory(F, omega, omega_order);
-  ReedSolomon<Field, FFTConvolutionFactory> r(N, M, F, factory);
+  FFTConvolutionFactory factory(f, omega, omega_order);
+  ReedSolomon<Field, FFTConvolutionFactory> r(N, M, f, factory);
   r.interpolate(&L2[0]);
   for (size_t i = 0; i < M; ++i) {
     EXPECT_EQ(L2[i], L[i]);
@@ -141,8 +141,8 @@ void one_field_reed_solomon(const typename Field::Elt& omega,
   for (size_t i = 0; i < N; ++i) {
     L3[i] = L[i];
   }
-  SlowConvolutionFactory slow_factory(F);
-  ReedSolomon<Field, SlowConvolutionFactory> r_slow(N, M, F, slow_factory);
+  SlowConvolutionFactory slow_factory(f);
+  ReedSolomon<Field, SlowConvolutionFactory> r_slow(N, M, f, slow_factory);
   r_slow.interpolate(&L3[0]);
   for (size_t i = 0; i < M; ++i) {
     EXPECT_EQ(L3[i], L[i]);
@@ -150,8 +150,8 @@ void one_field_reed_solomon(const typename Field::Elt& omega,
 }
 
 TEST(ReedSolomonTest, ReedSolomon) {
-  one_field_reed_solomon(omegaf, omegaf_order, f);
-  one_field_reed_solomon(omegag, omegag_order, g);
+  one_field_reed_solomon(omegaf, omegaf_order, F);
+  one_field_reed_solomon(omegag, omegag_order, G);
 }
 
 TEST(Reed_Solomon, Product) {
@@ -168,25 +168,25 @@ TEST(Reed_Solomon, Product) {
   Elt omega = omegag;
   uint64_t omega_order = omegag_order;
   Elt A[large], B[large];
-  Bogorng<Fp<1>> rng(&g);
+  Bogorng<Fp<1>> rng(&G);
   for (size_t i = 0; i < small; ++i) {
     A[i] = rng.next();
     B[i] = rng.next();
   }
 
-  FFTConvolutionFactory factory(g, omega, omega_order);
-  ReedSolomon r(small, large, g, factory);
+  FFTConvolutionFactory factory(G, omega, omega_order);
+  ReedSolomon r(small, large, G, factory);
   r.interpolate(A);
   r.interpolate(B);
 
   Elt C[large];
   for (size_t i = 0; i < smallc; ++i) {
-    C[i] = g.mulf(A[i], B[i]);
+    C[i] = G.mulf(A[i], B[i]);
   }
-  ReedSolomon rc(smallc, large, g, factory);
+  ReedSolomon rc(smallc, large, G, factory);
   rc.interpolate(C);
   for (size_t i = 0; i < large; ++i) {
-    EXPECT_EQ(g.mulf(A[i], B[i]), C[i]);
+    EXPECT_EQ(G.mulf(A[i], B[i]), C[i]);
   }
 }
 
@@ -198,25 +198,25 @@ TEST(ReedSolomonTest, SlowConvolutionFactory) {
   using ReedSolomon = ReedSolomon<Field, SlowConvolutionFactory>;
   using Poly = Poly<N, Field>;
 
-  Bogorng<Field> rng(&f);
+  Bogorng<Field> rng(&F);
   Poly P;
 
   // arbitrary coefficients
   for (size_t i = 0; i < N; ++i) {
-    P[i] = f.of_scalar(i * i * i + (i & 0xF) + (i ^ (i << 2)));
+    P[i] = F.of_scalar(i * i * i + (i & 0xF) + (i ^ (i << 2)));
   }
   // lagrange basis, i.e., values at first m points
   Elt L[M];
   for (size_t i = 0; i < M; ++i) {
-    Elt x = f.of_scalar(i);
-    L[i] = Interpolation::eval_monomial(P, x, f);
+    Elt x = F.of_scalar(i);
+    L[i] = Interpolation::eval_monomial(P, x, F);
   }
   Elt L2[M];
   for (size_t i = 0; i < N; ++i) {
     L2[i] = L[i];
   }
-  SlowConvolutionFactory factory(f);
-  ReedSolomon r(N, M, f, factory);
+  SlowConvolutionFactory factory(F);
+  ReedSolomon r(N, M, F, factory);
   r.interpolate(L2);
   for (size_t i = 0; i < M; ++i) {
     EXPECT_EQ(L2[i], L[i]);
@@ -233,18 +233,18 @@ TEST(ReedSolomonTest, LowDegreePolynomial) {
 
   Elt omega = omegaf;
   uint64_t omega_order = omegaf_order;
-  Bogorng<Field> rng(&f);
+  Bogorng<Field> rng(&F);
   Poly P;
 
   // arbitrary coefficients
   for (size_t i = 0; i < N; ++i) {
-    P[i] = f.of_scalar(i * i * i + (i & 0xF) + (i ^ (i << 2)));
+    P[i] = F.of_scalar(i * i * i + (i & 0xF) + (i ^ (i << 2)));
   }
   // lagrange basis, i.e., values at first n+m points
   Elt L[M];
   for (size_t i = 0; i < M; ++i) {
-    Elt x = f.of_scalar(i);
-    L[i] = Interpolation::eval_monomial(P, x, f);
+    Elt x = F.of_scalar(i);
+    L[i] = Interpolation::eval_monomial(P, x, F);
   }
   Elt L2[N + M];
   for (size_t i = 0; i < N; ++i) {
@@ -254,15 +254,15 @@ TEST(ReedSolomonTest, LowDegreePolynomial) {
   for (size_t i = 0; i < N + 10; ++i) {
     L3[i] = L[i];
   }
-  FFTConvolutionFactory factory(f, omega, omega_order);
-  ReedSolomonFactory<Field, FFTConvolutionFactory> rf(factory, f);
+  FFTConvolutionFactory factory(F, omega, omega_order);
+  ReedSolomonFactory<Field, FFTConvolutionFactory> rf(factory, F);
   auto r = rf.make(N, M);
   r->interpolate(L2);
   for (size_t i = 0; i < M; ++i) {
     EXPECT_EQ(L2[i], L[i]);
   }
   // Giving N + 10 points for a polynomial of degree only N-1
-  ReedSolomon r2(N + 10, M, f, factory);
+  ReedSolomon r2(N + 10, M, F, factory);
   r2.interpolate(L3);
   for (size_t i = 0; i < M; ++i) {
     EXPECT_EQ(L3[i], L[i]);
@@ -318,13 +318,13 @@ TEST(ReedSolomonTest, FieldExtension) {
 // ==================== Benchmarking ====================
 
 // This benchmark template works for both standard fields and field extensions.
-template <class BaseField, class FFT, class RS, const BaseField& F,
+template <class BaseField, class FFT, class RS, const BaseField& f,
           const FFT& factory>
 void BM_ReedSolomon(benchmark::State& state) {
   using Elt = typename BaseField::Elt;
-  Bogorng<BaseField> rng(&F);
+  Bogorng<BaseField> rng(&f);
   size_t n = state.range(0);
-  RS r = RS(n, n * 4, F, factory);
+  RS r = RS(n, n * 4, f, factory);
   std::vector<Elt> L2(n + n * 4);
   for (size_t i = 0; i < n; ++i) {
     L2[i] = rng.next();

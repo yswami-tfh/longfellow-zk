@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@
 #include "sumcheck/circuit.h"
 #include "sumcheck/prover.h"
 #include "util/log.h"
+#include "util/readbuffer.h"
 #include "zk/zk_common.h"
 #include "zk/zk_proof.h"
 #include "zk/zk_prover.h"
@@ -147,8 +148,8 @@ TEST_F(ZKTest, short_proofs_fail) {
   std::vector<uint8_t> buf(213348, 1u);
   // Check that short proofs fail.
   for (size_t i = 1; i < buf.size(); ++i) {
-    std::vector<uint8_t>::const_iterator zi = buf.cbegin();
-    EXPECT_FALSE(zkpv.read(zi, buf.end() - i, p256_base));
+    ReadBuffer rb(buf.data(), buf.size() - i);
+    EXPECT_FALSE(zkpv.read(rb, p256_base));
   }
 }
 
@@ -158,8 +159,8 @@ TEST_F(ZKTest, random_proofs_fail) {
   for (size_t i = 0; i < buf.size(); ++i) {
     buf[i] = random() & 0xff;
   }
-  std::vector<uint8_t>::const_iterator zi = buf.cbegin();
-  EXPECT_FALSE(zkpv.read(zi, buf.end(), p256_base));
+  ReadBuffer rb(buf);
+  EXPECT_FALSE(zkpv.read(rb, p256_base));
 }
 
 TEST_F(ZKTest, elt_out_of_range) {
@@ -190,8 +191,8 @@ TEST_F(ZKTest, elt_out_of_range) {
     for (size_t i = 0; i < 32; ++i) {
       buf[bad_elts[bi] + i] = 0xff;
     }
-    std::vector<uint8_t>::const_iterator zi = buf.cbegin();
-    EXPECT_FALSE(zkpv.read(zi, buf.end(), p256_base));
+    ReadBuffer rb(buf);
+    EXPECT_FALSE(zkpv.read(rb, p256_base));
     for (size_t i = 0; i < 32; ++i) {
       buf[bad_elts[bi] + i] = 0x00;
     }
@@ -211,11 +212,11 @@ TEST(ZK, test_circuit_io) {
   c.l.push_back(Layer<Fp256Base>{.nw = 7, .logw = 3, .quad = nullptr});
   ZkProof<Fp256Base> zkpv(c, 4, 16);
   std::vector<uint8_t> buf(213348, 0x02u);
-  std::vector<uint8_t>::const_iterator zi = buf.cbegin();
-  EXPECT_FALSE(zkpv.read(zi, buf.end(), p256_base));
+  ReadBuffer rb(buf);
+  EXPECT_FALSE(zkpv.read(rb, p256_base));
 }
 
-void dump(const char* msg, const std::vector<uint8_t>& bytes) {
+void dump(const char* msg, const std::vector<uint8_t> bytes) {
   size_t sz = bytes.size();
   log(INFO, "%s size: %zu", msg, sz);
 

@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,8 +31,8 @@ namespace {
 template <class Field>
 void test_each_symbol(const Field &F) {
   using EvaluationBackend = EvaluationBackend<Field>;
-  using v8 = Logic<Field, EvaluationBackend>::v8;
-  using v6 = Logic<Field, EvaluationBackend>::template bitvec<6>;
+  using v8 = typename Logic<Field, EvaluationBackend>::v8;
+  using v6 = typename Logic<Field, EvaluationBackend>::template bitvec<6>;
   const EvaluationBackend ebk(F, false);
   const Logic<Field, EvaluationBackend> L(&ebk, F);
   Base64Decoder<Logic<Field, EvaluationBackend> > bd(L);
@@ -65,7 +65,7 @@ void test_each_symbol(const Field &F) {
 template <class Field>
 void test_strings(const Field &F) {
   using EvaluationBackend = EvaluationBackend<Field>;
-  using v8 = Logic<Field, EvaluationBackend>::v8;
+  using v8 = typename Logic<Field, EvaluationBackend>::v8;
   const EvaluationBackend ebk(F, false);
   const Logic<Field, EvaluationBackend> L(&ebk, F);
   Base64Decoder<Logic<Field, EvaluationBackend> > bd(L);

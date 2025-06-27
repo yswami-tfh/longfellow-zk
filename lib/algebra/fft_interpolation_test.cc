@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,7 +42,6 @@ Elt omega = F.of_string(
     "19103219067921713944291392827692070036145651957329286315305642004821462161"
     "904");
 size_t omega_order = 1 << 28;
-constexpr size_t N = 1 << 16;
 
 TEST(FFTInterpolation, Simple) {
   Bogorng<Field> rng(&F);
@@ -134,7 +133,9 @@ TEST(FFTInterpolation, Product) {
     }
   }
 }
+}  // namespace
 
+namespace bench {
 // benchmark the FFT over a P256^2 with a real root of unity
 void BM_FFTInterpolationFp2(benchmark::State& state) {
   using BaseField = Fp256<true>;
@@ -163,5 +164,5 @@ void BM_FFTInterpolationFp2(benchmark::State& state) {
 }
 BENCHMARK(BM_FFTInterpolationFp2)->RangeMultiplier(4)->Range(1024, (1 << 22));
 
-}  // namespace
+}  // namespace bench
 }  // namespace proofs

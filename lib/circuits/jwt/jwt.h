@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -150,9 +150,9 @@ class JWT {
 
       r_.shift(vw.attr_id_len_[i], 100, B, 100, B, zz, 3);
       uint8_t sep[3] = {'"', ':', '"'};
-      for (size_t i = 0; i < 3; ++i) {
-        auto want_i = lc_.template vbit<8>(sep[i]);
-        lc_.vassert_eq(&B[i], want_i);
+      for (size_t j = 0; j < 3; ++j) {
+        auto want_j = lc_.template vbit<8>(sep[j]);
+        lc_.vassert_eq(&B[j], want_j);
       }
 
       auto three = lc_.template vbit<2>(3);

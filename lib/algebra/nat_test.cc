@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -79,10 +79,10 @@ TEST(Nat, Parsing) {
 
   Nat<4> a = Nat<4>::of_bytes(buf);
 
-  EXPECT_EQ(a.bit(0), 1);
-  EXPECT_EQ(a.bit(8), 1);
-  EXPECT_EQ(a.bit(255), 0);
-  EXPECT_EQ(a.bit(254), 1);
+  EXPECT_EQ(a.bit(0), 1u);
+  EXPECT_EQ(a.bit(8), 1u);
+  EXPECT_EQ(a.bit(255), 0u);
+  EXPECT_EQ(a.bit(254), 1u);
 
   std::array<uint64_t, 4> a64 = {0x9c79158f78bcc397ull, 0x4fbad19f321011feull,
                                  0x564d03a003b1f4e9ull, 0x6d789c4df645a9c4ull};

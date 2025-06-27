@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,14 +30,14 @@
 #include "util/panic.h"
 
 namespace proofs {
-template <class Logic>
+template <class Logic, size_t IndexBits = CborConstants::kIndexBits>
 class Cbor {
  public:
   using Field = typename Logic::Field;
   using EltW = typename Logic::EltW;
   using BitW = typename Logic::BitW;
   using v8 = typename Logic::v8;
-  static constexpr size_t kIndexBits = CborConstants::kIndexBits;
+  static constexpr size_t kIndexBits = IndexBits;
   static constexpr size_t kNCounters = CborConstants::kNCounters;
   using bv_counters = typename Logic::template bitvec<kNCounters>;
 
@@ -482,7 +482,7 @@ class Cbor {
     const Memcmp<Logic> CMP(L);
     std::vector<v8> B(20 + 2);
     date_helper(n, j, ds, B);
-    auto lt = CMP.lt(20, &B[2], now);
+    auto lt = CMP.lt(20, now, &B[2]);
     L.assert1(lt);
   }
 

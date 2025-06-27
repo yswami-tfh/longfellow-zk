@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -69,13 +69,13 @@ TEST(MerkleTree, VerifyProof) {
 
     MerkleTreeVerifier verifier(n, root);
     const size_t nproof = 7;  // 1 + ceil(lg n)
-    EXPECT_LE(n, 1 << (nproof - 1));
+    EXPECT_LE(n, 1u << (nproof - 1));
     Digest proof[nproof];
     for (size_t pos = 0; pos < n; pos++) {
       size_t proof_size = prover.generate_proof(proof, pos);
       EXPECT_LE(proof_size, nproof);
-      EXPECT_GE(proof_size, 1);
-      EXPECT_EQ(0, n >> proof_size);
+      EXPECT_GE(proof_size, 1u);
+      EXPECT_EQ(0u, n >> proof_size);
       if (pos + 1 == n) {
         EXPECT_EQ(merkle_tree_len(n), proof_size);
       }

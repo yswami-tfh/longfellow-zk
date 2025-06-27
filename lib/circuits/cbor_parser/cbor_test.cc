@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -228,9 +228,9 @@ TEST(CBOR, VerifyParseSize) {
     std::vector<CborC::position_witness> pwC(n);
     CborC::global_witness gwC;
 
-    for (size_t i = 0; i < n; ++i) {
-      inC[i] = LC.vinput<8>();
-      pwC[i].encoded_sel_header = Q.input();
+    for (size_t j = 0; j < n; ++j) {
+      inC[j] = LC.vinput<8>();
+      pwC[j].encoded_sel_header = Q.input();
     }
     gwC.invprod_decode = Q.input();
     gwC.cc0 = Q.input();
@@ -244,9 +244,9 @@ TEST(CBOR, VerifyParseSize) {
     // Fake parser output, otherwise the compiler eliminates important wires.
     constexpr size_t kNCounters = CborC::kNCounters;
     size_t nout = 0;
-    for (size_t i = 0; i < n; ++i) {
+    for (size_t j = 0; j < n; ++j) {
       for (size_t l = 0; l < kNCounters; ++l) {
-        Q.output(psC[i].c[l], nout++);
+        Q.output(psC[j].c[l], nout++);
       }
     }
 

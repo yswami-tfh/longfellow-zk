@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ class Prover : public ProverLayers<Field> {
  public:
   using typename super::inputs;
 
-  explicit Prover(const Field& f) : ProverLayers<Field>(f) {};
+  explicit Prover(const Field& f) : ProverLayers<Field>(f) {}
 
   // Generate proof for circuit. pad can be nullptr if the caller does not
   // want to add any pad to the proof. Caller must ensure in, t, and F remain

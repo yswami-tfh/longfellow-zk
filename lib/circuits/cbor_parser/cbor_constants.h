@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 
 namespace proofs {
 struct CborConstants {
-  static constexpr size_t kNCounters = 7;
+  static constexpr size_t kNCounters = 4;
   static constexpr size_t kIndexBits = 12;
 };
 }  // namespace proofs

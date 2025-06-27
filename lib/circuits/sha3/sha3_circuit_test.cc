@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@
 #include "util/log.h"
 #include "util/panic.h"
 #include "gtest/gtest.h"
-#include "third_party/absl/time/clock.h"
 
 namespace proofs {
 namespace {
@@ -160,7 +159,6 @@ TEST(SHA3_Circuit, Keccak_F_1600_Copies) {
   }
 
   {
-    const int64_t start = absl::GetCurrentTimeNanos();
     Prover<Field> prover(F);
     Prover<Field>::inputs pin;
     auto V = prover.eval_circuit(&pin, CIRCUIT.get(), W->clone(), F);
@@ -168,9 +166,6 @@ TEST(SHA3_Circuit, Keccak_F_1600_Copies) {
     Transcript tsp((uint8_t *)"test", 4);
     Proof<Field> proof(CIRCUIT->nl);
     prover.prove(&proof, nullptr, CIRCUIT.get(), pin, tsp);
-
-    const int64_t end = absl::GetCurrentTimeNanos();
-    log(INFO, "prover nc=%zd took %.2fs", nc, 1.e-9 * (end - start));
 
     const char *why = "ok";
     Transcript tsv((uint8_t *)"test", 4);

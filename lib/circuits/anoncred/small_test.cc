@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -93,7 +93,8 @@ void fill_witness(Dense<Fp256Base> &W, Dense<Fp256Base> &pub) {
   // Generate a witness from the mdoc data structure to remain close
   // to the application use case.
   Sw sw(p256, p256_scalar);
-  SmallOpenedAttribute show[kNumAttr] = {{74, 1, (uint8_t *)"\xf5", 1}};
+  SmallOpenedAttribute age = {74, 1, (uint8_t *)"\xf5", 1};
+  std::vector<SmallOpenedAttribute> show(kNumAttr, age);
 
   {
     constexpr size_t t_ind = 0;

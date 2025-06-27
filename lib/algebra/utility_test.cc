@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,7 +29,6 @@ TEST(Utility, BatchInverse) {
   const Field F(
       "218882428718392752222464057452572750885483644004160343436982041865758084"
       "95617");
-  using Elt = typename Field::Elt;
   Bogorng<Field> rng(&F);
 
   constexpr size_t n = 133, da = 3, db = 5;

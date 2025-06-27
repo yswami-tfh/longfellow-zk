@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -44,10 +44,10 @@ Elt omega = F.of_string(
 size_t omega_order = 1 << 28;
 constexpr size_t N = 1 << 16;
 
-static Elt reroot(const Elt& omega_n, size_t n, size_t r, const Field& F) {
+static Elt reroot(const Elt& omega_n, size_t n, size_t r, const Field& FF) {
   Elt omega_r = omega_n;
   while (r < n) {
-    F.mul(omega_r, omega_r);
+    FF.mul(omega_r, omega_r);
     r += r;
   }
   return omega_r;
@@ -147,10 +147,12 @@ TEST(FFT, Shift) {
     F.mul(w, omega_n);
   }
 }
+}  // namespace
 
 // ================ Benchmarking ==============================================
 
 // benchmark the FFT over a P256^2 with a real root of unity
+namespace bench {
 void BM_FFTFp2(benchmark::State& state) {
   using BaseField = Fp256<true>;
   using Field = Fp2<BaseField>;
@@ -251,6 +253,5 @@ BENCHMARK(BM_FFT_F64)
     ->RangeMultiplier(4)
     ->Range(1024, (1 << 22));
 
-
-}  // namespace
+}  // namespace bench
 }  // namespace proofs

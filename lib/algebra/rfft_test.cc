@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ TEST(RFFTTest, Simple) {
       for (size_t i = 0; i < n; ++i) {
         AR0[i] = F0.of_scalar(i * i * i + (i & 0xF) + (i ^ (i << 2)));
         AR1[i] = AR0[i];
-        AC[i] = ExtElt(AR0[i]);
+        AC[i] = ExtElt{AR0[i]};
       }
 
       // compare RFFT against FFT

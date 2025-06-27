@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ class SmallWitness {
   using Elt = typename Field::Elt;
   using Nat = typename Field::N;
   using EcdsaWitness = VerifyWitness3<EC, ScalarField>;
-  static constexpr size_t kMaxSHABlocks = 3;
+  static constexpr size_t kMaxSHABlocks = 7;
 
  public:
   const EC ec_;

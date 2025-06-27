@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -321,7 +321,9 @@ TEST(GF2_128, Bytes) {
     EXPECT_EQ(e, ef.value());
   }
 }
+}  // namespace
 
+namespace subfield {
 template <size_t subfield_log_bits>
 void test_subfield() {
   using Field = GF2_128<subfield_log_bits>;
@@ -359,5 +361,5 @@ TEST(GF2_128, Subfields) {
   // not enough bits in uint64_t for a (1<<7)-bit subfield
 }
 
-}  // namespace
+}  // namespace subfield
 }  // namespace proofs

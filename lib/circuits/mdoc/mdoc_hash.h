@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -190,7 +190,7 @@ class MdocHash {
 
     // Attributes: Equality of hash with MSO value
     for (size_t ai = 0; ai < vw.num_attr_; ++ai) {
-      v8 B[64];
+      v8 B[96];
       // Check the hash matches the value in the signed MSO.
       r_.shift(vw.attr_mso_[ai].k, 2 + 32, &cmp_buf[0], kMaxMsoLen,
                vw.in_ + 5 + 2, zz, /*unroll=*/3);
@@ -209,13 +209,8 @@ class MdocHash {
                                vw.attr_sha_[ai].data());
 
       // Check that the attribute_id and value occur in the hashed text.
-      r_.shift(vw.attr_ei_[ai].offset, kIdLen, B, 128, vw.attrb_[ai].data(), zz,
-               3);
-      assert_attribute(kIdLen, vw.attr_ei_[ai].len, B, oa[ai].attr);
-
-      r_.shift(vw.attr_ev_[ai].offset, kValueLen, B, 128, vw.attrb_[ai].data(),
-               zz, 3);
-      assert_attribute(kValueLen, vw.attr_ev_[ai].len, B, oa[ai].v1);
+      r_.shift(vw.attr_ei_[ai].offset, 96, B, 128, vw.attrb_[ai].data(), zz, 3);
+      assert_attribute(96, vw.attr_ei_[ai].len, B, oa[ai]);
     }
   }
 
@@ -230,24 +225,22 @@ class MdocHash {
 
   // Checks that an attribute id or attribute value is as expected.
   // The len parameter holds the byte length of the expected id or value.
-  // The want[] array is assumed to be 2-padded to the max length. This
-  // prevents the Prover from cheating by using a shorter value, because the
-  // got[] value is only 2-padded after the len param.
   void assert_attribute(size_t max, const vind& len, const v8 got[/*max*/],
-                        const v8 want[/*max*/]) const {
-    auto two = lc_.konst(2);
+                        const OpenedAttribute& oa) const {
+    // Copy the attribute id and value into a single array.
+    v8 want[96];
+    for (size_t j = 0; j < 32; ++j) {
+      want[j] = oa.attr[j];
+    }
+    for (size_t j = 0; j < 64; ++j) {
+      want[32 + j] = oa.v1[j];
+    }
+
+    // Perform an equality check on the first len bytes.
     for (size_t j = 0; j < max; ++j) {
       auto ll = lc_.vlt(j, len);
-      for (size_t k = 0; k < 8; ++k) {
-        // The 2 here is a non-bit value that cannot appear in an mdoc
-        // because it is not a valid bit. Any value outside of {0,1} can work
-        // as long as it is consistent with the fill_bit_string function used
-        // by the caller.
-        auto gotjk = lc_.eval(got[j][k]);
-        auto got_k = lc_.mux(&ll, &gotjk, two);
-        auto want_k = lc_.eval(want[j][k]);
-        lc_.assert_eq(&got_k, want_k);
-      }
+      auto same = lc_.eq(8, got[j].data(), want[j].data());
+      lc_.assert_implies(&ll, same);
     }
   }
 
@@ -304,11 +297,7 @@ class MdocHash {
       0x31, 0x38, 0x30, 0x31, 0x33, 0x2E, 0x35, 0x2E, 0x31};
   static constexpr size_t kValueDigestsLen = sizeof(kValueDigestsCheck);
 
-  static constexpr uint8_t kTag32[] = {0x58, 0x20};
-
   static constexpr size_t kDateLen = 20;
-  static constexpr size_t kIdLen = 32;
-  static constexpr size_t kValueLen = 64;
 
   const LogicCircuit& lc_;
   Flatsha sha_;

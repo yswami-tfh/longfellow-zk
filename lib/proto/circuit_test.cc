@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@
 #include "ec/p256.h"
 #include "sumcheck/circuit.h"
 #include "util/log.h"
+#include "util/readbuffer.h"
 #include "gtest/gtest.h"
 
 namespace proofs {
@@ -46,40 +47,40 @@ void serialize_test2(const Circuit<FF>& circuit, const FF& F,
   log(INFO, "size: %zu", sz);
 
   CircuitRep<FF> cr2(F, field_id);
-  std::vector<uint8_t>::const_iterator zi = bytes.begin();
 
   log(INFO, "Deserializing2");
-  auto c2 = cr2.from_bytes(zi, sz);
+  ReadBuffer rb(bytes);
+  auto c2 = cr2.from_bytes(rb);
   log(INFO, "Parsed from bytes");
   EXPECT_TRUE(c2 != nullptr);
   EXPECT_TRUE(*c2 == circuit);
 
   // Test truncated inputs.
-  zi = bytes.begin();
-  auto bad = cr2.from_bytes(zi, sz - 1);
+  ReadBuffer rb1(bytes.data(), sz - 1);
+  auto bad = cr2.from_bytes(rb1);
   EXPECT_TRUE(bad == nullptr);
 
-  zi = bytes.begin() + 1;
-  bad = cr2.from_bytes(zi, sz - 1);
+  ReadBuffer rb2(bytes.data() + 1, sz - 1);
+  bad = cr2.from_bytes(rb2);
   EXPECT_TRUE(bad == nullptr);
 
   uint8_t tmp[32];
   // Test corrupted numconsts
-  zi = bytes.begin();
+  ReadBuffer rb3(bytes);
   size_t clobber = CircuitRep<FF>::kBytesWritten * 7 - 1;
   tmp[0] = bytes[clobber];
   bytes[clobber] = 1;
-  bad = cr2.from_bytes(zi, sz);
+  bad = cr2.from_bytes(rb3);
   EXPECT_TRUE(bad == nullptr);
   bytes[clobber] = tmp[0];
 
   // Test corrupted constant table Elt
-  zi = bytes.begin();
+  ReadBuffer rb4(bytes);
   for (size_t i = 0; i < 32; ++i) {
     tmp[i] = bytes[clobber + 1 + i];
     bytes[clobber + 1 + i] = 0xff;
   }
-  bad = cr2.from_bytes(zi, sz);
+  bad = cr2.from_bytes(rb4);
   EXPECT_TRUE(bad == nullptr);
   for (size_t i = 0; i < 32; ++i) {
     bytes[clobber + 1 + i] = tmp[i];

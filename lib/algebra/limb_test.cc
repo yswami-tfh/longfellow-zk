@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,16 +28,16 @@ TEST(Limb, Scalar) {
   EXPECT_EQ(k42, k42);
 
   auto k42u64 = k42.u64();
-  EXPECT_EQ(k42u64[0], 42);
+  EXPECT_EQ(k42u64[0], 42u);
   for (size_t i = 1; i < 4; ++i) {
-    EXPECT_EQ(k42u64[i], 0);
+    EXPECT_EQ(k42u64[i], 0u);
   }
 
   uint8_t bytes[32];
   k42.to_bytes(bytes);
   EXPECT_EQ(bytes[0], 42);
   for (size_t i = 1; i < 32; ++i) {
-    EXPECT_EQ(bytes[i], 0);
+    EXPECT_EQ(bytes[i], 0u);
   }
 }
 
@@ -68,7 +68,7 @@ TEST(Limb, Array) {
   for (size_t i = 0; i < 31; ++i) {
     EXPECT_EQ(bytes[i], i + 1);
   }
-  EXPECT_EQ(bytes[31], 0);
+  EXPECT_EQ(bytes[31], 0u);
 }
 
 }  // namespace

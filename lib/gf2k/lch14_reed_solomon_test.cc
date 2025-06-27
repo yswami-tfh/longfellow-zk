@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -66,7 +66,9 @@ TEST(LCH14, ReedSolomon) {
     }
   }
 }
+}  // namespace
 
+namespace bench {
 void BM_ReedSolomon_gf128(benchmark::State& state) {
   size_t n = state.range(0);
   if (4 * n < 1 << 16) {
@@ -104,5 +106,5 @@ void BM_ReedSolomon_gf128(benchmark::State& state) {
 
 BENCHMARK(BM_ReedSolomon_gf128)->RangeMultiplier(4)->Range(1 << 10, 1 << 20);
 
-}  // namespace
+}  // namespace bench
 }  // namespace proofs

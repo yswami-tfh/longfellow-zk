@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -265,17 +265,18 @@ TEST(Logic, AssertSum) {
 TEST(Logic, GF2PolynomialMultiplier) {
   const EvaluationBackend ebk(F);
   const Logic L(&ebk, F);
-  static constexpr size_t w = 7;
+  static constexpr size_t w = 10;
 
   for (size_t a = 0; a < (1 << w); ++a) {
     for (size_t b = 0; b < (1 << w); ++b) {
-      Logic::BitW ea[w], eb[w], ec[2 * w];
+      Logic::BitW ea[w], eb[w], ec[2 * w], ec2[2 * w];
       for (size_t i = 0; i < w; ++i) {
         ea[i] = L.bit((a >> i) & 1);
         eb[i] = L.bit((b >> i) & 1);
       }
 
       L.gf2_polynomial_multiplier(w, ec, ea, eb);
+      L.gf2_polynomial_multiplier_karat(w, ec2, ea, eb);
       size_t c = 0;
       for (size_t i = 0; i < w; ++i) {
         if ((a >> i) & 1) {
@@ -285,6 +286,7 @@ TEST(Logic, GF2PolynomialMultiplier) {
 
       for (size_t i = 0; i < 2 * w; ++i) {
         EXPECT_EQ(L.eval(ec[i]), L.eval(L.bit((c >> i) & 1)));
+        EXPECT_EQ(L.eval(ec2[i]), L.eval(L.bit((c >> i) & 1)));
       }
     }
   }

@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,21 +30,15 @@
 #include "circuits/mac/mac_witness.h"
 #include "circuits/mdoc/mdoc_constants.h"
 #include "circuits/mdoc/mdoc_hash.h"
+#include "circuits/mdoc/mdoc_zk.h"
 #include "circuits/sha/flatsha256_witness.h"
 #include "gf2k/gf2_128.h"
 #include "util/crypto.h"
 #include "util/log.h"
 #include "util/panic.h"
 
-namespace proofs {
 
-/* This struct allows a verifier to express which attribute and value the prover
- * must claim. */
-struct OpenedAttribute {
-  uint8_t id[32];
-  uint8_t value[64];
-  size_t id_len, value_len;
-};
+namespace proofs {
 
 struct CborIndex {
   size_t k, v, ndx;
@@ -76,8 +70,21 @@ struct FullAttribute {
   // The original mdoc into which all offsets point.
   const uint8_t* doc;
 
-  bool operator==(const OpenedAttribute& y) const {
+  bool operator==(const RequestedAttribute& y) const {
     return y.id_len == id_len && memcmp(y.id, &doc[id_ind], id_len) == 0;
+  }
+
+  size_t witness_length(const RequestedAttribute&  attr) {
+    size_t r = id_len + val_len + 1 + 12;
+    if (attr.type == CborAttributeType::kDate) {
+      r += 4;
+    } else if (attr.type == CborAttributeType::kString ||
+               attr.type == CborAttributeType::kBytes) {
+      r += 1;
+      if (val_len > 23) r++;
+      if (val_len > 255) r++;
+    }
+    return r;
   }
 };
 
@@ -399,12 +406,68 @@ void fill_bit_string(DenseFiller<Field>& filler, const uint8_t s[/*len*/],
                      size_t len, size_t max, const Field& Fs) {
   std::vector<typename Field::Elt> v(max * 8, Fs.of_scalar(2));
   for (size_t i = 0; i < max && i < len; ++i) {
-    for (size_t j = 0; j < 8; ++j) {
-      v[i * 8 + j] = (s[i] >> j & 0x1) ? Fs.one() : Fs.zero();
-    }
+    fill_byte(v, s[i], i, Fs);
   }
   filler.push_back(v);
 }
+
+template <class Field>
+void fill_byte(std::vector<typename Field::Elt>& v, uint8_t b, size_t i,
+               const Field& F) {
+  for (size_t j = 0; j < 8; ++j) {
+    v[i*8 + j] = ( b >> j & 0x1 ) ? F.one() : F.zero();
+  }
+}
+
+template <class Field>
+void fill_attribute(DenseFiller<Field> &filler, const RequestedAttribute &attr,
+                    const Field &F, size_t version = 2) {
+  if (version <= 2) {
+    fill_bit_string(filler, attr.id, attr.id_len, 32, F);
+    fill_bit_string(filler, attr.value, attr.value_len, 64, F);
+  } else if (version == 3) {
+    // In version 3, the attribute is encoded as the raw cbor string that
+    // included <name of identifier> <elementValue> <attributeValue>
+    std::vector<typename Field::Elt> v(96 * 8, F.of_scalar(0));
+
+    size_t i = 0;
+    for (size_t j = 0; j < attr.id_len && i < 96; ++j, ++i) {
+      fill_byte(v, attr.id[j], i, F);
+    }
+    fill_byte(v, 0x6C, i++, F);  // Cbor type for length 12 string.
+    const char* ev = "elementValue";
+    for (size_t j = 0; j < 12 && i < 96; ++j, ++i) {
+      fill_byte(v, ev[j], i, F);
+    }
+    std::vector<uint8_t> vbuf;
+    uint8_t tag[] = {0xD9, 0x03, 0xEC, 0x6A};
+    switch (attr.type) {
+      case CborAttributeType::kPrimitive:
+        vbuf.push_back(attr.value[0]);
+        break;
+      case CborAttributeType::kString:
+        append_text_len(vbuf, attr.value_len);
+        vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
+        break;
+      case CborAttributeType::kBytes:
+        append_bytes_len(vbuf, attr.value_len);
+        vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
+        break;
+      case CborAttributeType::kDate:
+        vbuf.insert(vbuf.end(), tag, tag + 4);
+        vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
+        break;
+      case CborAttributeType::kInt:
+        vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
+        break;
+    }
+    for (size_t j = 0; j < vbuf.size() && i < 96; ++j, ++i) {
+      fill_byte(v, vbuf[j], i, F);
+    }
+    filler.push_back(v);
+  }
+}
+
 
 template <class EC, class ScalarField>
 class MdocSignatureWitness {
@@ -576,8 +639,8 @@ class MdocHashWitness {
 
   bool compute_witness(const uint8_t mdoc[/* len */], size_t len,
                        const uint8_t transcript[/* tlen */], size_t tlen,
-                       const OpenedAttribute attrs[], size_t attrs_len,
-                       const uint8_t tnow[/*20*/]) {
+                       const RequestedAttribute attrs[], size_t attrs_len,
+                       const uint8_t tnow[/*20*/], size_t version = 2) {
     if (!pm_.parse_device_response(len, mdoc)) {
       log(ERROR, "Failed to parse device response");
       return false;
@@ -616,19 +679,13 @@ class MdocHashWitness {
     attr_mso_.resize(attrs_len);
     attr_ev_.resize(attrs_len);
     attr_ei_.resize(attrs_len);
-
     attr_bytes_.resize(attrs_len);
-    for (size_t i = 0; i < attrs_len; ++i) {
-      attr_bytes_[i].resize(128);
-    }
-
     atw_.resize(attrs_len);
-    for (size_t i = 0; i < attrs_len; ++i) {
-      atw_[i].resize(2);
-    }
 
     // Match the attributes with the witnesses from the deviceResponse.
     for (size_t i = 0; i < attrs_len; ++i) {
+      attr_bytes_[i].resize(128);
+      atw_[i].resize(2);
       bool found = false;
       for (auto fa : pm_.attributes_) {
         if (fa == attrs[i]) {
@@ -638,6 +695,9 @@ class MdocHashWitness {
           attr_mso_[i] = fa.mso;
           attr_ei_[i].offset = fa.id_ind - fa.tag_ind;
           attr_ei_[i].len = fa.id_len;
+          if (version > 2) {
+            attr_ei_[i].len = fa.witness_length(attrs[i]);
+          }
           attr_ev_[i].offset = fa.val_ind - fa.tag_ind;
           attr_ev_[i].len = fa.val_len;
           found = true;

@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -506,20 +506,20 @@ TEST(HostDecoderTest, Lookup) {
                            'e', 'y', 'I', 'n', 'f', 'o'};
   const CborDoc *c_dki = croot.lookup(mso.data(), sizeof(dki), dki, ndx);
   EXPECT_NE(c_dki, nullptr);
-  EXPECT_EQ(4, ndx);
+  EXPECT_EQ(4u, ndx);
 
   const uint8_t dk[9] = {'d', 'e', 'v', 'i', 'c', 'e', 'K', 'e', 'y'};
   const CborDoc *c_dk = c_dki[1].lookup(mso.data(), sizeof(dk), dk, ndx);
   EXPECT_NE(c_dk, nullptr);
-  EXPECT_EQ(0, ndx);
+  EXPECT_EQ(0u, ndx);
 
   const CborDoc *c_pkx = c_dk[1].lookup_negative(-1, ndx);
   EXPECT_NE(c_pkx, nullptr);
-  EXPECT_EQ(2, ndx);
+  EXPECT_EQ(2u, ndx);
 
   const CborDoc *c_00 = c_dk[1].lookup_unsigned(1, ndx);
   EXPECT_NE(c_00, nullptr);
-  EXPECT_EQ(0, ndx);
+  EXPECT_EQ(0u, ndx);
 
   // Perform lookups that should fail
   std::vector<std::vector<uint8_t>> not_keys = {

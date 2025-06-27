@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -440,16 +440,13 @@ class ZkCommon {
 
   static Elt bind_quad(const Layer<Field>* clr, const Claims& cla,
                        const LayerChallenge<Field>* chal, const Field& F) {
-    auto QUAD = clr->quad->clone();
-    QUAD->bind_g(cla.logv, cla.g[0], cla.g[1], chal->alpha, chal->beta, F);
-
-    // bind QUAD[G|r,l] to R, L
-    for (size_t round = 0; round < clr->logw; ++round) {
-      for (size_t hand = 0; hand < 2; ++hand) {
-        QUAD->bind_h(chal->hb[hand][round], hand, F);
-      }
-    }
-    return QUAD->scalar();
+    return clr->quad->bind_gh_all(
+        // G
+        cla.logv, cla.g[0], cla.g[1], chal->alpha, chal->beta,
+        // H
+        clr->logw, chal->hb[0], chal->hb[1],
+        // Field
+        F);
   }
 };
 }  // namespace proofs

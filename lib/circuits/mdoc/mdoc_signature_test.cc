@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,7 +29,9 @@
 #include "circuits/mac/mac_reference.h"
 #include "circuits/mdoc/mdoc_examples.h"
 #include "circuits/mdoc/mdoc_hash.h"
+#include "circuits/mdoc/mdoc_test_attributes.h"
 #include "circuits/mdoc/mdoc_witness.h"
+#include "circuits/mdoc/mdoc_zk.h"
 #include "ec/p256.h"
 #include "gf2k/gf2_128.h"
 #include "random/secure_random_engine.h"
@@ -55,7 +57,6 @@ TEST(mdoc, mdoc_signature_test) {
 
   set_log_level(INFO);
 
-  size_t ninput;
   std::unique_ptr<Circuit<Fp256Base>> CIRCUIT;
 
   // ======== compile time =========================
@@ -86,7 +87,6 @@ TEST(mdoc, mdoc_signature_test) {
 
     CIRCUIT = Q.mkcircuit(/*nc=*/1);
     dump_info("mdoc signature", Q);
-    ninput = Q.ninput();
     log(INFO, "Compile done");
   }
 
@@ -192,7 +192,6 @@ TEST(mdoc, mdoc_signature_test_with_issuer_list) {
   constexpr size_t MAX_ISSUERS = 50;
   set_log_level(INFO);
 
-  size_t ninput;
   std::unique_ptr<Circuit<Fp256Base>> CIRCUIT;
 
   // ======== compile time =========================
@@ -233,7 +232,6 @@ TEST(mdoc, mdoc_signature_test_with_issuer_list) {
 
     CIRCUIT = Q.mkcircuit(/*nc=*/1);
     dump_info("mdoc signature_with_issuer", Q);
-    ninput = Q.ninput();
     log(INFO, "Compile done");
   }
 
@@ -328,20 +326,12 @@ TEST(mdoc, mdoc_signature_test_with_issuer_list) {
 }
 
 template <class Field>
-void fill_attribute(DenseFiller<Field> &filler, const OpenedAttribute &attr,
-                    const Field &F) {
-  fill_bit_string(filler, attr.id, attr.id_len, 32, F);
-  fill_bit_string(filler, attr.value, attr.value_len, 64, F);
-}
-
-template <class Field>
 void mdoc_hash_run(const typename Field::Elt &omega, uint64_t omega_order,
-                   const Field &F, std::vector<OpenedAttribute> attrs) {
+                   const Field &F, std::vector<RequestedAttribute> attrs) {
   using MdocHw = MdocHashWitness<P256, Field>;
 
   set_log_level(INFO);
 
-  size_t ninput;
   std::unique_ptr<Circuit<Field>> CIRCUIT;
 
   // ======== compile time =========================
@@ -383,7 +373,6 @@ void mdoc_hash_run(const typename Field::Elt &omega, uint64_t omega_order,
 
     CIRCUIT = Q.mkcircuit(/*nc=*/1);
     dump_info("mdoc hash and parse", Q);
-    ninput = Q.ninput();
     log(INFO, "Compile done");
   }
 
@@ -434,9 +423,8 @@ void mdoc_hash_run(const typename Field::Elt &omega, uint64_t omega_order,
 }
 
 TEST(mdoc, mdoc_hash_test_fp128) {
-  std::vector<OpenedAttribute> oa;
-  oa.push_back(OpenedAttribute{
-      {'a', 'g', 'e', '_', 'o', 'v', 'e', 'r', '_', '1', '8'}, {0xF5}, 11, 1});
+  std::vector<RequestedAttribute> oa;
+  oa.push_back(test::age_over_18);
 
   static const Fp128<> Fg;
   mdoc_hash_run<Fp128<>>(
@@ -445,15 +433,10 @@ TEST(mdoc, mdoc_hash_test_fp128) {
 }
 
 TEST(mdoc, mdoc_hash_test_fp128_2) {
-  std::vector<OpenedAttribute> oa;
-  oa.push_back(OpenedAttribute{
-      {'a', 'g', 'e', '_', 'o', 'v', 'e', 'r', '_', '1', '8'}, {0xF5}, 11, 1});
+  std::vector<RequestedAttribute> oa;
+  oa.push_back(test::age_over_18);
 
-  oa.push_back(
-      OpenedAttribute{{'f', 'a', 'm', 'i', 'l', 'y', '_', 'n', 'a', 'm', 'e'},
-                      {'M', 'u', 's', 't', 'e', 'r', 'm', 'a', 'n', 'n'},
-                      11,
-                      10});
+  oa.push_back(test::familyname_mustermann);
   oa.shrink_to_fit();
 
   static const Fp128<> Fg;

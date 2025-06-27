@@ -14,4 +14,4 @@
 
 proofs_add_tests(small_test)
 
-target_link_libraries(small_test mdoc_zk)
+target_link_libraries(small_test mdoc)

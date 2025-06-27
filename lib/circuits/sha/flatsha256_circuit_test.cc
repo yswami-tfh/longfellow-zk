@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -320,7 +320,7 @@ TEST(FlatSHA256_Circuit, assert_message_prefix) {
 // =============================================================================
 
 template <class Field, size_t plucker_size>
-std::unique_ptr<Circuit<Field>> test_block_circuit_size(const Field& F,
+std::unique_ptr<Circuit<Field>> test_block_circuit_size(const Field& f,
                                                         const char* test_name) {
   using CompilerBackend = CompilerBackend<Field>;
   using LogicCircuit = Logic<Field, CompilerBackend>;
@@ -329,9 +329,9 @@ std::unique_ptr<Circuit<Field>> test_block_circuit_size(const Field& F,
       FlatSHA256Circuit<LogicCircuit, BitPlucker<LogicCircuit, plucker_size>>;
   using packed_v32C = typename FlatShaC::packed_v32;
 
-  QuadCircuit<Field> Q(F);
+  QuadCircuit<Field> Q(f);
   const CompilerBackend cbk(&Q);
-  const LogicCircuit LC(&cbk, F);
+  const LogicCircuit LC(&cbk, f);
   FlatShaC FSHAC(LC);
 
   std::vector<v32C> vin(16);
@@ -431,6 +431,9 @@ TEST(FlatSHA256_Circuit, block_size_gf2_128_4) {
   test_block_circuit_size<f_128, 4>(Fs, "block_size_gf2128_pack_4");
 }
 
+}  // namespace
+
+namespace bench {
 // =============================================================================
 // Benchmarks for sumcheck- and zk- proofs about hashing messages of various
 // sizes over different fields.
@@ -483,16 +486,16 @@ void push(const std::array<typename Field::Elt, N>& a, size_t& wi, size_t c,
 
 template <class Field>
 void push(uint8_t a, size_t& wi, size_t c, size_t numCopies, Dense<Field>& W,
-          const Field& F) {
+          const Field& f) {
   for (size_t i = 0; i < 8; ++i) {
-    W.v_[(wi++) * numCopies + c] = (a >> i) & 1 ? F.one() : F.zero();
+    W.v_[(wi++) * numCopies + c] = (a >> i) & 1 ? f.one() : f.zero();
   }
 }
 
 // Copy the same input for all copies.
 template <class Field, size_t pluckerSize>
 void fill_input(Dense<Field>& W, size_t numBlocks, size_t ninputs,
-                size_t numCopies, const Field& F) {
+                size_t numCopies, const Field& f) {
   uint8_t numb;
   std::vector<uint8_t> inb(64 * numBlocks);
   std::vector<FlatSHA256Witness::BlockWitness> bwb(numBlocks);
@@ -511,20 +514,20 @@ void fill_input(Dense<Field>& W, size_t numBlocks, size_t ninputs,
   for (size_t c = 0; c < numCopies; ++c) {
     size_t wi = 0;
 
-    W.v_[(wi++) * numCopies + c] = F.one();
-    push(numb, wi, c, numCopies, W, F);
+    W.v_[(wi++) * numCopies + c] = f.one();
+    push(numb, wi, c, numCopies, W, f);
     for (size_t j = 0; j < numBlocks * 64; j++) {
-      push(inb[j], wi, c, numCopies, W, F);
+      push(inb[j], wi, c, numCopies, W, f);
     }
 
     // Target hash.
     for (size_t j = 0; j < 256; ++j) {
       W.v_[(wi++) * numCopies + c] =
-          (hash[(255 - j) / 8] >> (j % 8)) & 1 ? F.one() : F.zero();
+          (hash[(255 - j) / 8] >> (j % 8)) & 1 ? f.one() : f.zero();
     }
 
     // Sha block witnesses.
-    BitPluckerEncoder<Field, pluckerSize> BPENC(F);
+    BitPluckerEncoder<Field, pluckerSize> BPENC(f);
     for (size_t j = 0; j < numBlocks; j++) {
       for (size_t k = 0; k < 48; ++k) {
         push(BPENC.mkpacked_v32(bwb[j].outw[k]), wi, c, numCopies, W);
@@ -679,6 +682,5 @@ void BM_ShaZK_quadbind_fp2_128(benchmark::State& state) {
 }
 BENCHMARK(BM_ShaZK_quadbind_fp2_128)->RangeMultiplier(2)->Range(1, 32);
 
-
-}  // namespace
+}  // namespace bench
 }  // namespace proofs

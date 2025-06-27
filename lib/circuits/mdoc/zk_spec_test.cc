@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
+#include "file/base/helpers.h"
+#include "file/base/options.h"
+#include "file/base/path.h"
+#include "circuits/mdoc/mdoc_examples.h"
 #include "circuits/mdoc/mdoc_zk.h"
+#include "circuits/mdoc/mdoc_test_attributes.h"
 #include "util/crypto.h"
 #include "util/log.h"
+#include "testing/base/public/gmock.h"
 #include "gtest/gtest.h"
 
 namespace proofs {
@@ -89,6 +96,52 @@ TEST(ZkSpecTest, CorrectSpecFor2Attributes) { test_circuit_hash(2); }
 TEST(ZkSpecTest, CorrectSpecFor3Attributes) { test_circuit_hash(3); }
 
 TEST(ZkSpecTest, CorrectSpecFor4Attributes) { test_circuit_hash(4); }
+
+void test_proof_creation_and_verification(const ZkSpecStruct& zk_spec) {
+  // Read the circuit file from circuits/hash.
+  auto cp = file::JoinPath("circuits/mdoc/circuits/",
+                           zk_spec.circuit_hash);
+  std::string circuit_bytes;
+  EXPECT_OK(file::GetContents(cp, &circuit_bytes, file::Defaults()));
+
+  const MdocTests* test = &mdoc_tests[3]; /* Sprind example w/4 attributes  */
+  RequestedAttribute claims[4] = {test::age_over_18,
+                                  test::familyname_mustermann,
+                                  test::birthdate_1971_09_01, test::height_175};
+
+  uint8_t* zkproof;
+  size_t proof_len;
+
+  {
+    log(INFO, "starting prover");
+    MdocProverErrorCode ret = run_mdoc_prover(
+        (uint8_t*)circuit_bytes.data(), circuit_bytes.size(), test->mdoc,
+        test->mdoc_size, test->pkx.as_pointer, test->pky.as_pointer,
+        test->transcript, test->transcript_size, claims, zk_spec.num_attributes,
+        (const char*)test->now, &zkproof, &proof_len, &zk_spec);
+    EXPECT_EQ(ret, MDOC_PROVER_SUCCESS);
+  }
+  {
+    log(INFO, "starting verifier");
+    MdocVerifierErrorCode ret = run_mdoc_verifier(
+        (uint8_t*)circuit_bytes.data(), circuit_bytes.size(),
+        test->pkx.as_pointer, test->pky.as_pointer, test->transcript,
+        test->transcript_size, claims, zk_spec.num_attributes,
+        (const char*)test->now, zkproof, proof_len, test->doc_type, &zk_spec);
+    EXPECT_EQ(ret, MDOC_VERIFIER_SUCCESS);
+    free(zkproof);
+  }
+}
+
+// Test proof creation and verification against all supported circuits.
+TEST(ZkSpecTest, ProofCreationAndVerification) {
+  for (size_t k = 0; k < kNumZkSpecs; ++k) {
+    const ZkSpecStruct& zk_spec = kZkSpecs[k];
+    log(INFO, "Testing circuit hash %s, %d attributes", zk_spec.circuit_hash,
+        zk_spec.num_attributes);
+    test_proof_creation_and_verification(zk_spec);
+  }
+}
 
 }  // namespace
 }  // namespace proofs

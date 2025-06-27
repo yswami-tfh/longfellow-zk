@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -52,12 +52,12 @@ class Small {
   using v8 = typename LogicCircuit::v8;
   using v32 = typename LogicCircuit::v32;
   static constexpr size_t kIndexBits = 5;
-  static constexpr size_t kMaxSHABlocks = 3;
+  static constexpr size_t kMaxSHABlocks = 7;
   static constexpr size_t kMaxMsoLen = kMaxSHABlocks * 64 - 9;
 
   using vind = typename LogicCircuit::template bitvec<kIndexBits>;
   using Flatsha = FlatSHA256Circuit<LogicCircuit, BitPlucker<LogicCircuit, 3>>;
-  using Routing = Routing<LogicCircuit>;
+  using RoutingL = Routing<LogicCircuit>;
   using ShaBlockWitness = typename Flatsha::BlockWitness;
 
   const LogicCircuit& lc_;
@@ -137,13 +137,13 @@ class Small {
     sha_.assert_message(kMaxSHABlocks, vw.nb_, vw.in_, vw.sig_sha_);
 
     const Memcmp<LogicCircuit> CMP(lc_);
-    // validFrom <= now
+    // // validFrom <= now
     lc_.assert1(CMP.leq(kDateLen, &vw.in_[84], &now[0]));
 
-    // now <= validUntil
+    // // now <= validUntil
     lc_.assert1(CMP.leq(kDateLen, &now[0], &vw.in_[92]));
 
-    // DPK_{x,y}
+    // // DPK_{x,y}
     EltW dpkx = repack(vw.in_, 100);
     EltW dpky = repack(vw.in_, 132);
     lc_.assert_eq(&dpkx, vw.dpkx_);
@@ -171,7 +171,7 @@ class Small {
   }
 
   Flatsha sha_;
-  Routing r_;
+  RoutingL r_;
 };
 }  // namespace proofs
 

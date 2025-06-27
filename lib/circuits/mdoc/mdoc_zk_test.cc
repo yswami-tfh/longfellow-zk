@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC.
+// Copyright 2025 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@
 #include <cstdlib>
 
 #include "circuits/mdoc/mdoc_examples.h"
+#include "circuits/mdoc/mdoc_test_attributes.h"
 #include "random/secure_random_engine.h"
 #include "util/log.h"
 #include "benchmark/benchmark.h"
@@ -38,12 +39,10 @@ class MdocZKTest : public testing::Test {
   MdocZKTest() { set_log_level(INFO); }
 
   static void SetUpTestCase() {
-    const ZkSpecStruct &zk_spec_1 = kZkSpecs[0];
-    const ZkSpecStruct &zk_spec_2 = kZkSpecs[1];
     if (circuit1_ == nullptr) {
-      EXPECT_EQ(generate_circuit(&zk_spec_1, &circuit1_, &circuit_len1_),
+      EXPECT_EQ(generate_circuit(&kZkSpecs[0], &circuit1_, &circuit_len1_),
                 CIRCUIT_GENERATION_SUCCESS);
-      EXPECT_EQ(generate_circuit(&zk_spec_2, &circuit2_, &circuit_len2_),
+      EXPECT_EQ(generate_circuit(&kZkSpecs[1], &circuit2_, &circuit_len2_),
                 CIRCUIT_GENERATION_SUCCESS);
     }
   }
@@ -57,8 +56,8 @@ class MdocZKTest : public testing::Test {
     }
   }
 
-  void run_test(size_t num_attrs, const RequestedAttribute *attrs,
-                const MdocTests *test,
+  void run_test(const char *test_name, size_t num_attrs,
+                const RequestedAttribute *attrs, const MdocTests *test,
                 MdocProverErrorCode want_ret = MDOC_PROVER_SUCCESS) {
     uint8_t *circuit = num_attrs == 1 ? circuit1_ : circuit2_;
     size_t circuit_len = num_attrs == 1 ? circuit_len1_ : circuit_len2_;
@@ -68,6 +67,7 @@ class MdocZKTest : public testing::Test {
     uint8_t *zkproof;
     size_t proof_len;
 
+    log(INFO, "========== Test %s", test_name);
     {
       log(INFO, "starting prover");
       MdocProverErrorCode ret = run_mdoc_prover(
@@ -101,163 +101,114 @@ size_t MdocZKTest::circuit_len1_ = 0;
 size_t MdocZKTest::circuit_len2_ = 0;
 
 typedef struct {
+  const char *test_name;
   RequestedAttribute claims[1];
   const MdocTests *mdoc;
 } Claims;
 
 typedef struct {
+  const char *test_name;
   RequestedAttribute claims[2];
   const MdocTests *mdoc;
 } TwoClaims;
 
-static const RequestedAttribute age_over_18 = {
-    .id = {'a', 'g', 'e', '_', 'o', 'v', 'e', 'r', '_', '1', '8'},
-    .value = {0xf5},
-    .id_len = 11,
-    .value_len = 1};
-
-static const RequestedAttribute not_over_18 = {
-    .id = {'a', 'g', 'e', '_', 'o', 'v', 'e', 'r', '_', '1', '8'},
-    .value = {0xf4},
-    .id_len = 11,
-    .value_len = 1};
-
-static const RequestedAttribute familyname_mustermann = {
-    .id = {'f', 'a', 'm', 'i', 'l', 'y', '_', 'n', 'a', 'm', 'e'},
-    .value = {'M', 'u', 's', 't', 'e', 'r', 'm', 'a', 'n', 'n'},
-    .id_len = 11,
-    .value_len = 10};
-
-static const RequestedAttribute birthdate_1971_09_01 = {
-    .id = {'b', 'i', 'r', 't', 'h', '_', 'd', 'a', 't', 'e'},
-    .value = {'1', '9', '7', '1', '-', '0', '9', '-', '0', '1'},
-    .id_len = 10,
-    .value_len = 10};
-
-static const RequestedAttribute birthdate_1998_09_04 = {
-    .id = {'b', 'i', 'r', 't', 'h', '_', 'd', 'a', 't', 'e'},
-    .value = {'1', '9', '9', '8', '-', '0', '9', '-', '0', '4'},
-    .id_len = 10,
-    .value_len = 10};
-
-static const RequestedAttribute height_175 = {
-    {'h', 'e', 'i', 'g', 'h', 't', 'h'}, {0x18, 0xaf}, 6, 2};
-
 TEST_F(MdocZKTest, one_claim) {
-  const Claims tests[] = {{
-                              {age_over_18},
-                              &mdoc_tests[0],
-                          },
-                          {
-                              {age_over_18},
-                              &mdoc_tests[1],
-                          },
-                          {
-                              {age_over_18},
-                              &mdoc_tests[2],
-                          },
-                          {
-                              {familyname_mustermann},
-                              &mdoc_tests[3],
-                          },
-                          {
-                              {birthdate_1971_09_01},
-                              &mdoc_tests[3],
-                          },
-                          {
-                              {height_175},
-                              &mdoc_tests[3],
-                          },
-                          // Test Google IDPass which uses a different docType.
-                          {
-                              {birthdate_1998_09_04},
-                              &mdoc_tests[4],
-                          },
-                          // Website explainer example.
-                          {
-                              {age_over_18},
-                              &mdoc_tests[5],
-                          }};
+  const Claims tests[] = {
+      {"+18-mdoc[0]", {test::age_over_18}, &mdoc_tests[0]},
+      {"+18-mdoc[1]", {test::age_over_18}, &mdoc_tests[1]},
+      {"+18-mdoc[2]", {test::age_over_18}, &mdoc_tests[2]},
+      {"familyname_mustermann-mdoc[3]",
+       {test::familyname_mustermann},
+       &mdoc_tests[3]},
+      {"birthdate_1971_09_01-mdoc[3]",
+       {test::birthdate_1971_09_01},
+       &mdoc_tests[3]},
+      {"height_175-mdoc[3]", {test::height_175}, &mdoc_tests[3]},
+      // Test Google IDPass which uses a different docType.
+      {"birthdate_1998_09_04-idpass-mdoc[4]",
+       {test::birthdate_1998_09_04},
+       &mdoc_tests[4]},
+      // Website explainer example.
+      {"age_over_18-website-mdoc[5]", {test::age_over_18}, &mdoc_tests[5]},
+      // Large mdoc from 2025-06-10.
+      {"not_over_18-large-mdoc[6]", {test::not_over_18}, &mdoc_tests[6]}};
 
   for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); ++i) {
-    run_test(1, tests[i].claims, tests[i].mdoc);
+    run_test(tests[i].test_name, 1, tests[i].claims, tests[i].mdoc);
   }
 }
 
 TEST_F(MdocZKTest, two_claims) {
   const TwoClaims two_tests[] = {
       {
+          "18+,familyname_mustermann-mdoc[3]",
           {
-              age_over_18,
-              familyname_mustermann,
+              test::age_over_18,
+              test::familyname_mustermann,
           },
           &mdoc_tests[3],
       },
       {
+          "18+,birthdate_1971_09_01-mdoc[3]",
           {
-              age_over_18,
-              birthdate_1971_09_01,
+              test::age_over_18,
+              test::birthdate_1971_09_01,
           },
           &mdoc_tests[3],
       },
       {
+          "height175,issue_date_2024-03-15-mdoc[3]",
           {
-              height_175,
-              {.id = {'i', 's', 's', 'u', 'e', '_', 'd', 'a', 't', 'e'},
-               .value = {'2', '0', '2', '4', '-', '0', '3', '-', '1', '5'},
-               .id_len = 10,
-               .value_len = 10},
+              test::height_175,
+              test::issue_date_2024_03_15,
           },
           &mdoc_tests[3],
       },
   };
 
   for (size_t i = 0; i < sizeof(two_tests) / sizeof(two_tests[0]); ++i) {
-    run_test(2, two_tests[i].claims, two_tests[i].mdoc);
+    run_test(two_tests[i].test_name, 2, two_tests[i].claims, two_tests[i].mdoc);
   }
 }
 
 TEST_F(MdocZKTest, wrong_witness) {
   const Claims fail_tests[] = {
+      {"fail-not_over_18-mdoc[0]", {test::not_over_18}, &mdoc_tests[0]},
+      {"fail-not_over_18-mdoc[1]", {test::not_over_18}, &mdoc_tests[1]},
+      {"fail-not_over_18-mdoc[2]", {test::not_over_18}, &mdoc_tests[2]},
       {
-          {not_over_18},
-          &mdoc_tests[0],
-      },
-      {
-          {not_over_18},
-          &mdoc_tests[1],
-      },
-      {
-          {not_over_18},
-          &mdoc_tests[2],
-      },
-      {
+          "fail-birthdate_1971_09_01-mdoc[3]",
           {{{'b', 'i', 'r', 't', 'h', '_', 'd', 'a', 't', 'e'},
             {'0', '9', '7', '1', '-', '0', '9', '-', '0', '1'},
             10,
-            10}},
+            10,
+            kDate}},
           &mdoc_tests[3],
       },
       {
+          "fail-birthdate_1871_09_01-mdoc[3]",
           {{{'b', 'i', 'r', 't', 'h', '_', 'd', 'a', 't', 'e'},
             {'1', '8', '7', '1', '-', '0', '9', '-', '0', '1'},
             10,
-            10}},
+            10,
+            kDate}},
           &mdoc_tests[3],
       },
       {
+          "fail-birthdate_1971_09_01-mdoc[3]",
           {{{'b', 'i', 'r', 't', 'h', '_', 'd', 'a', 't', 'e'},
             {0xD9, 0x03, 0xEC, 0x6A, '1', '9', '7', '1', '-', '0', '9', '-',
              '0', '1', '0'},
             10,
-            15}},
+            15,
+            kDate}},
           &mdoc_tests[3],
       },
   };
 
   for (size_t i = 0; i < sizeof(fail_tests) / sizeof(fail_tests[0]); ++i) {
-    run_test(1, fail_tests[i].claims, fail_tests[i].mdoc,
-             MDOC_PROVER_GENERAL_FAILURE);
+    run_test(fail_tests[i].test_name, 1, fail_tests[i].claims,
+             fail_tests[i].mdoc, MDOC_PROVER_GENERAL_FAILURE);
   }
 }
 
@@ -265,12 +216,12 @@ TEST_F(MdocZKTest, bad_arguments) {
   constexpr int num_attrs = 1;
   const ZkSpecStruct &zk_spec_1 = kZkSpecs[0];
   RequestedAttribute attrs[num_attrs] = {
-      age_over_18,
+      test::age_over_18,
   };
-  uint8_t tr[100];
-  uint8_t zkproof[30000];
-  uint8_t circuit[60000];
-  uint8_t mdoc[60000];
+  uint8_t tr[100] = {0};
+  uint8_t zkproof[30000]= {0};
+  uint8_t circuit[60000] = {0};
+  uint8_t mdoc[60000] = {0};
   const char *pk = "0x15";
   const char *pk2 = "bad_pk";
   const char *now = "2023-11-02T09:00:00Z";
@@ -423,7 +374,7 @@ TEST_F(MdocZKTest, attr_mismatch) {
   size_t proof_len;
   constexpr int num_attrs = 2;
   const ZkSpecStruct &zk_spec_2 = kZkSpecs[1];
-  RequestedAttribute attrs[num_attrs] = {age_over_18, age_over_18};
+  RequestedAttribute attrs[num_attrs] = {test::age_over_18, test::age_over_18};
   const struct MdocTests *test = &mdoc_tests[0];
 
   {
@@ -449,7 +400,7 @@ TEST_F(MdocZKTest, bad_proofs) {
   set_log_level(ERROR);
   constexpr int num_attrs = 1;
   const ZkSpecStruct &zk_spec_1 = kZkSpecs[0];
-  RequestedAttribute attrs[num_attrs] = {age_over_18};
+  RequestedAttribute attrs[num_attrs] = {test::age_over_18};
   const struct MdocTests *test = &mdoc_tests[0];
 
   constexpr size_t kMaxProofLen = 100000;
@@ -467,7 +418,8 @@ TEST_F(MdocZKTest, bad_proofs) {
 }
 
 static const Claims benchmark_claim = {
-    {age_over_18},
+    "benchmark",
+    {test::age_over_18},
     &mdoc_tests[0],
 };
 
