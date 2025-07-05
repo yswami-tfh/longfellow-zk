@@ -66,6 +66,6 @@ We have defined several unit, sumcheck, and zk benchmarks. Here are some of
 them:
 
 ```
-$ ./algebra/fft_test --benchmark_filter=BM_*
+$ ./algebra/fft_test --benchmark_filter='BM_*'
 $ ./circuits/sha/flatsha256_circuit_test --benchmark_filter=BM_ShaZK_fp2_128
 ```
