@@ -153,7 +153,7 @@ TEST(FFT, Shift) {
 
 // benchmark the FFT over a P256^2 with a real root of unity
 namespace bench {
-void BM_FFTFp2(benchmark::State& state) {
+void BM_FFT_Fp256_2(benchmark::State& state) {
   using BaseField = Fp256<true>;
   using Field = Fp2<BaseField>;
 
@@ -175,7 +175,7 @@ void BM_FFTFp2(benchmark::State& state) {
     FFT<Field>::fftb(&A[0], N, OMEGA31, 1u << 31, F);
   }
 }
-BENCHMARK(BM_FFTFp2)
+BENCHMARK(BM_FFT_Fp256_2)
     ->RangeMultiplier(4)
     ->Range(1024, (1 << 22));
 

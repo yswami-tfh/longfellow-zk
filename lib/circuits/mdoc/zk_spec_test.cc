@@ -25,8 +25,8 @@
 #include "file/base/options.h"
 #include "file/base/path.h"
 #include "circuits/mdoc/mdoc_examples.h"
-#include "circuits/mdoc/mdoc_zk.h"
 #include "circuits/mdoc/mdoc_test_attributes.h"
+#include "circuits/mdoc/mdoc_zk.h"
 #include "util/crypto.h"
 #include "util/log.h"
 #include "testing/base/public/gmock.h"
@@ -55,15 +55,23 @@ TEST(ZkSpecTest, ReturnNullptrIfNoMatchingZkSpecFound) {
 }
 
 void test_circuit_hash(size_t num_attributes) {
-  ZkSpecStruct zk_spec = {};
+  // Find the latest version of the circuit for the given number of attributes.
+  const ZkSpecStruct* zk_spec = nullptr;
+  for (int i = 0; i < kNumZkSpecs; ++i) {
+    if (kZkSpecs[i].num_attributes == num_attributes) {
+      if (zk_spec == nullptr || kZkSpecs[i].version > zk_spec->version) {
+        zk_spec = &kZkSpecs[i];
+      }
+    }
+  }
+
   uint8_t* circuit;
   size_t circuit_len;
-  zk_spec.num_attributes = num_attributes;
-  auto ret = generate_circuit(&zk_spec, &circuit, &circuit_len);
+  auto ret = generate_circuit(zk_spec, &circuit, &circuit_len);
   EXPECT_EQ(ret, CIRCUIT_GENERATION_SUCCESS);
 
   uint8_t cid[kSHA256DigestSize];
-  EXPECT_TRUE(circuit_id(cid, circuit, circuit_len, &zk_spec));
+  EXPECT_TRUE(circuit_id(cid, circuit, circuit_len, zk_spec));
 
   char buf[kSHA256DigestSize * 2 + 1] = {};
   hex_to_str(buf, cid, kSHA256DigestSize);

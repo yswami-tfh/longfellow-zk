@@ -175,6 +175,13 @@ class mdoc_1f {
   struct OpenedAttribute {
     v8 attr[96];  // representing attribute name, elementValue delimiter, and
                   // finally the attribute value.
+    v8 len;
+    void input(const LogicCircuit& lc) {
+      for (size_t j = 0; j < 96; ++j) {
+        attr[j] = lc.template vinput<8>();
+      }
+      len = lc.template vinput<8>();
+    }
   };
 
   struct PathEntry {
@@ -273,7 +280,7 @@ class mdoc_1f {
 
       // Check that the attribute_id and value occur in the hashed text.
       r_.shift(vw.attr_ei_[ai].offset, 96, B, 128, vw.attrb_[ai].data(), zz, 3);
-      assert_attribute(96, vw.attr_ei_[ai].len, B, oa[ai].attr);
+      assert_attribute(96, oa[ai].len, B, oa[ai].attr);
     }
   }
 
@@ -319,7 +326,7 @@ class mdoc_1f {
 
   // Checks that an attribute id or attribute value is as expected.
   // The len parameter holds the byte length of the expected id or value.
-  void assert_attribute(size_t max, const vind& len, const v8 got[/*max*/],
+  void assert_attribute(size_t max, const v8& len, const v8 got[/*max*/],
                         const v8 want[/*max*/]) const {
     // auto two = lc_.konst(2);
     for (size_t j = 0; j < max; ++j) {

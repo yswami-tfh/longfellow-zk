@@ -243,6 +243,14 @@ class mdoc_1f_witness {
               &attr_bytes_[i][0], &atw_[i][0]);
           attr_mso_[i] = fa.mso;
           attr_ei_[i].offset = fa.id_ind - fa.tag_ind;
+
+          // Apply the offset fix from cl/786482988. The length of the element
+          // identifier is pre-pended to the attribute comparison string. This
+          // requires adding either 1 or 2 bytes depending on the cbor encoding.
+          attr_ei_[i].offset -= 1;
+          if (fa.id_len > 23) {
+            attr_ei_[i].offset -= 1;
+          }
           attr_ei_[i].len = fa.witness_length(attrs[i]);
           attr_ev_[i].offset = fa.val_ind - fa.tag_ind;
           attr_ev_[i].len = fa.val_len;
