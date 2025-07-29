@@ -37,6 +37,7 @@ namespace proofs {
 
 constexpr size_t kLigeroRate = 4;
 constexpr size_t kLigeroNreq = 189;
+constexpr size_t kVersion = 4;
 
 // Runs a zk prover and verifier for a field that requires a field extension
 // to perform the commitment.
@@ -58,7 +59,7 @@ void run2_test_zk(const Circuit<Field>& circuit, Dense<Field>& W,
 
   ZkProof<Field> zkpr(circuit, kLigeroRate, kLigeroNreq);
 
-  Transcript tp((uint8_t*)"zk_test", 7);
+  Transcript tp((uint8_t*)"zk_test", 7, kVersion);
   SecureRandomEngine rng;
   ZkProver<Field, RSFactory> prover(circuit, base, rsf);
   prover.commit(zkpr, W, tp, rng);
@@ -77,7 +78,7 @@ void run2_test_zk(const Circuit<Field>& circuit, Dense<Field>& W,
 
   ZkVerifier<Field, RSFactory> verifier(circuit, rsf, kLigeroRate, kLigeroNreq,
                                         base);
-  Transcript tv((uint8_t*)"zk_test", 7);
+  Transcript tv((uint8_t*)"zk_test", 7, kVersion);
   verifier.recv_commitment(zkpv, tv);
   EXPECT_TRUE(verifier.verify(zkpv, pub, tv));
   log(INFO, "ZK Verify done");
@@ -102,7 +103,7 @@ void run_failing_test_zk2(const Circuit<Field>& circuit, Dense<Field>& W,
 
   ZkProof<Field> zkpr(circuit, kLigeroRate, kLigeroNreq);
 
-  Transcript tp((uint8_t*)"zk_test", 7);
+  Transcript tp((uint8_t*)"zk_test", 7, kVersion);
   SecureRandomEngine rng;
   ZkProver<Field, RSFactory> prover(circuit, base, rsf);
   prover.commit(zkpr, W, tp, rng);
@@ -123,7 +124,7 @@ void run_test_zk(const Circuit<Field>& circuit, Dense<Field>& W,
 
   ZkProof<Field> zkpr(circuit, kLigeroRate, kLigeroNreq);
 
-  Transcript tp((uint8_t*)"zk_test", 7);
+  Transcript tp((uint8_t*)"zk_test", 7, kVersion);
   SecureRandomEngine rng;
   ZkProver<Field, RSFactory> prover(circuit, F, rsf);
   prover.commit(zkpr, W, tp, rng);
@@ -143,7 +144,7 @@ void run_test_zk(const Circuit<Field>& circuit, Dense<Field>& W,
 
   ZkVerifier<Field, RSFactory> verifier(circuit, rsf, kLigeroRate, kLigeroNreq,
                                         F);
-  Transcript tv((uint8_t*)"zk_test", 7);
+  Transcript tv((uint8_t*)"zk_test", 7, kVersion);
   verifier.recv_commitment(zkpv, tv);
   EXPECT_TRUE(verifier.verify(zkpv, pub, tv));
 }

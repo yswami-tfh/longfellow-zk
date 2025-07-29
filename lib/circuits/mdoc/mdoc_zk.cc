@@ -64,9 +64,12 @@
 // the verifier can then select its a_v half of the mac key, the prover can
 // then compute the MAC and finally place it into the correct part of the
 // dense witness array.
-// ex: numAttrs = 1, this function returns (1*768) + 161
-// ex: numAttrs = 2, this function returns (2*929) + 161
-size_t getHashMacIndex(size_t numAttrs) { return numAttrs * 8 * 96 + 160 + 1; }
+// ex: numAttrs = 1, this function returns (1*768 + 8) + 161
+size_t getHashMacIndex(size_t numAttrs, size_t version) {
+  // The conditional accounts for the length of the attribute field that is
+  // added in version 4.
+  return numAttrs * 8 * (96 + (version >= 4 ? 1 : 0)) + 160 + 1;
+}
 
 namespace proofs {
 
@@ -145,14 +148,17 @@ struct ProverState {
 };
 
 // Fills the hash witness with the attributes and the time input.
-void fill_attributes(DenseFiller<f_128> &hash_filler,
+bool fill_attributes(DenseFiller<f_128> &hash_filler,
                      const RequestedAttribute *attrs, size_t attrs_len,
-                     const uint8_t *now, const f_128 &Fs, size_t version = 2) {
+                     const uint8_t *now, const f_128 &Fs, size_t version) {
   hash_filler.push_back(Fs.one());
   for (size_t ai = 0; ai < attrs_len; ++ai) {
-    fill_attribute(hash_filler, attrs[ai], Fs, version);
+    if (!fill_attribute(hash_filler, attrs[ai], Fs, version)) {
+      return false;
+    }
   }
   fill_bit_string(hash_filler, now, 20, 20, Fs);
+  return true;
 }
 
 // Fills the signature witness with the public inputs pkX, pkY, and e.
@@ -166,14 +172,16 @@ void fill_signature_inputs(DenseFiller<Fp256Base> &sig_filler, const Elt &pkX,
 
 // Fills the public inputs for the hash and signature circuits.
 // Empty values for the MAC inputs and AV are used.
-void fill_public_inputs(DenseFiller<Fp256Base> &sig_filler,
+bool fill_public_inputs(DenseFiller<Fp256Base> &sig_filler,
                         DenseFiller<f_128> &hash_filler, const Elt &pkX,
                         const Elt &pkY, const uint8_t *tr, size_t tr_len,
                         const RequestedAttribute *attrs, size_t attrs_len,
                         const uint8_t *now, const uint8_t *docType,
                         size_t dt_len, const gf2k macs[], gf2k av,
-                        const f_128 &Fs, size_t version = 2) {
-  fill_attributes(hash_filler, attrs, attrs_len, now, Fs, version);
+                        const f_128 &Fs, size_t version) {
+  if (!fill_attributes(hash_filler, attrs, attrs_len, now, Fs, version)) {
+    return false;
+  }
 
   for (size_t i = 0; i < 6; ++i) { /* 6 mac + 1 av */
     fill_gf2k<f_128, f_128>(macs[i], hash_filler, Fs);
@@ -181,6 +189,11 @@ void fill_public_inputs(DenseFiller<Fp256Base> &sig_filler,
   fill_gf2k<f_128, f_128>(av, hash_filler, Fs);
 
   std::vector<uint8_t> docTypeBytes(docType, docType + dt_len);
+
+  // The verify_ecdsa circuit requires that e2 != 0. We consider the pr that the
+  // adversary produces a SHA-256 preimage of 0 to be negligible. Thus, we
+  // satisfy the pre-condition here by directly computing the transcript hash
+  // and assume it is not 0.
   Elt e2 = p256_base.to_montgomery(
       compute_transcript_hash<N>(tr, tr_len, &docTypeBytes));
   fill_signature_inputs(sig_filler, pkX, pkY, e2);
@@ -189,8 +202,8 @@ void fill_public_inputs(DenseFiller<Fp256Base> &sig_filler,
     fill_gf2k<f_128, Fp256Base>(macs[i], sig_filler, p256_base);
   }
   fill_gf2k<f_128, Fp256Base>(av, sig_filler, p256_base);
+  return true;
 }
-
 
 // Fills the hash and signature public inputs and private witnesses.
 bool fill_witness(DenseFiller<Fp256Base> &fill_b, DenseFiller<f_128> &fill_s,
@@ -198,8 +211,7 @@ bool fill_witness(DenseFiller<Fp256Base> &fill_b, DenseFiller<f_128> &fill_s,
                   const Elt &pkY, const uint8_t *tr, size_t tr_len,
                   const RequestedAttribute *attrs, size_t attrs_len,
                   const uint8_t *now, ProverState &state,
-                  SecureRandomEngine &rng, const f_128 &Fs,
-                  size_t version = 2) {
+                  SecureRandomEngine &rng, const f_128 &Fs, size_t version) {
   using MdocHW = MdocHashWitness<P256, f_128>;
   using MdocSW = MdocSignatureWitness<P256, Fp256Scalar>;
 
@@ -208,15 +220,17 @@ bool fill_witness(DenseFiller<Fp256Base> &fill_b, DenseFiller<f_128> &fill_s,
   auto sw = std::make_unique<MdocSW>(p256, p256_scalar, Fs);
 
   // hash public inputs
-  fill_attributes(fill_s, attrs, attrs_len, now, Fs, version);
+  if (!fill_attributes(fill_s, attrs, attrs_len, now, Fs, version)) {
+    return false;
+  }
 
   // init mac+av to 0
   for (size_t i = 0; i < 6 + 1; ++i) { /* 6 mac + 1 av */
     fill_gf2k<f_128, f_128>(Fs.zero(), fill_s, Fs);
   }
 
-  bool ok_h = hw->compute_witness(mdoc, mdoc_len, tr, tr_len, attrs,
-                                  attrs_len, now, version);
+  bool ok_h = hw->compute_witness(mdoc, mdoc_len, tr, tr_len, attrs, attrs_len,
+                                  now, version);
   bool ok_s = sw->compute_witness(pkX, pkY, mdoc, mdoc_len, tr, tr_len);
   if (!ok_h || !ok_s) return false;
 
@@ -319,6 +333,20 @@ CircuitGenerationErrorCode generate_circuit(const ZkSpecStruct *zk_spec,
     return CIRCUIT_GENERATION_NULL_INPUT;
   }
 
+  // Generator only supports the latest version of the ZKSpec for a number of
+  // attributes. Return an error if the requested version is not the latest.
+  int max_circuit_version = 0;
+  for (const ZkSpecStruct &spec : kZkSpecs) {
+    if (spec.num_attributes == zk_spec->num_attributes &&
+        spec.version > max_circuit_version) {
+      max_circuit_version = spec.version;
+    }
+  }
+
+  if (zk_spec->version != max_circuit_version) {
+    return CIRCUIT_GENERATION_INVALID_ZK_SPEC_VERSION;
+  }
+
   if (cb == nullptr || clen == nullptr) {
     log(INFO, "cb or clen is null");
     return CIRCUIT_GENERATION_NULL_INPUT;
@@ -384,12 +412,7 @@ CircuitGenerationErrorCode generate_circuit(const ZkSpecStruct *zk_spec,
     std::vector<MdocHash::OpenedAttribute> oa(number_of_attributes);
     MdocHash mdoc_h(lc);
     for (size_t ai = 0; ai < number_of_attributes; ++ai) {
-      for (size_t j = 0; j < 32; ++j) {
-        oa[ai].attr[j] = lc.template vinput<8>();
-      }
-      for (size_t j = 0; j < 64; ++j) {
-        oa[ai].v1[j] = lc.template vinput<8>();
-      }
+      oa[ai].input(lc);
     }
     v8 now[20];
     for (size_t i = 0; i < 20; ++i) {
@@ -522,7 +545,7 @@ MdocProverErrorCode run_mdoc_prover(
 
   // ========= Run prover ==============
   // Use the transcript from the session to select the random oracle.
-  Transcript tp(transcript, tr_len);
+  Transcript tp(transcript, tr_len, zk_spec->version);
 
   const Elt2 omega = p256_2.of_string(kRootX, kRootY);
   const FftExtConvolutionFactory fft_b(p256_base, p256_2, omega, 1ull << 31);
@@ -551,8 +574,8 @@ MdocProverErrorCode run_mdoc_prover(
   gf2k av = generate_mac_key(tp), macs[6];
   uint8_t macs_b[6 * f_128::kBytes];
   compute_macs(3, state.common, macs, macs_b, state.ap, av);
-  update_macs(W_sig, W_hash, kSigMacIndex, getHashMacIndex(attrs_len), macs, av,
-              Fs);
+  update_macs(W_sig, W_hash, kSigMacIndex,
+              getHashMacIndex(attrs_len, zk_spec->version), macs, av, Fs);
 
   if (!hash_p.prove(h_zk, W_hash, tp)) {
     return MDOC_PROVER_GENERAL_FAILURE;
@@ -667,6 +690,10 @@ MdocVerifierErrorCode run_mdoc_verifier(
     log(ERROR, "sig proof could not be parsed");
     return MDOC_VERIFIER_SIGNATURE_PARSING_FAILURE;
   }
+  if (rb.remaining() != 0) {
+    log(ERROR, "proof bytes contains extra data: %zu bytes", rb.remaining());
+    return MDOC_VERIFIER_SIGNATURE_PARSING_FAILURE;
+  }
 
   log(INFO, "proofs read");
 
@@ -683,7 +710,7 @@ MdocVerifierErrorCode run_mdoc_verifier(
                                            kLigeroNreq, p256_base);
 
   // Use the transcript from the session to select the random oracle.
-  class Transcript tv(transcript, tr_len);
+  class Transcript tv(transcript, tr_len, zk_spec->version);
 
   hash_v.recv_commitment(pr_hash, tv);
   sig_v.recv_commitment(pr_sig, tv);
@@ -697,10 +724,12 @@ MdocVerifierErrorCode run_mdoc_verifier(
   DenseFiller<Fp256Base> sig_filler(pub_sig);
 
   size_t dlen = strlen(docType);
-  fill_public_inputs(sig_filler, hash_filler, pkX, pkY, transcript, tr_len,
-                     attrs, attrs_len, (const uint8_t *)now,
-                     (const uint8_t *)docType, dlen, macs, av, Fs,
-                     zk_spec->version);
+  if (!fill_public_inputs(sig_filler, hash_filler, pkX, pkY, transcript, tr_len,
+                          attrs, attrs_len, (const uint8_t *)now,
+                          (const uint8_t *)docType, dlen, macs, av, Fs,
+                          zk_spec->version)) {
+    return MDOC_VERIFIER_GENERAL_FAILURE;
+  }
 
   if (hash_filler.size() != c_hash->npub_in ||
       sig_filler.size() != c_sig->npub_in) {

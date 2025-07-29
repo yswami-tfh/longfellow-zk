@@ -59,6 +59,16 @@ class MdocHash {
   struct OpenedAttribute {
     v8 attr[32]; /* 32b representing attribute name in be. */
     v8 v1[64];   /* 64b of attribute value */
+    v8 len;      /* public length of the encoded attribute id and value */
+    void input(const LogicCircuit& lc) {
+      for (size_t j = 0; j < 32; ++j) {
+        attr[j] = lc.template vinput<8>();
+      }
+      for (size_t j = 0; j < 64; ++j) {
+        v1[j] = lc.template vinput<8>();
+      }
+      len = lc.template vinput<8>();
+    }
   };
   struct CborIndex {
     vind k;
@@ -123,7 +133,7 @@ class MdocHash {
       dev_key_info_.input(lc);
       value_digests_.input(lc);
 
-      // // Attribute opening witnesses
+      // Attribute opening witnesses
       for (size_t ai = 0; ai < num_attr_; ++ai) {
         for (size_t i = 0; i < 64 * 2; ++i) {
           attrb_[ai].push_back(lc.template vinput<8>());
@@ -210,7 +220,7 @@ class MdocHash {
 
       // Check that the attribute_id and value occur in the hashed text.
       r_.shift(vw.attr_ei_[ai].offset, 96, B, 128, vw.attrb_[ai].data(), zz, 3);
-      assert_attribute(96, vw.attr_ei_[ai].len, B, oa[ai]);
+      assert_attribute(96, oa[ai].len, B, oa[ai]);
     }
   }
 
@@ -225,7 +235,7 @@ class MdocHash {
 
   // Checks that an attribute id or attribute value is as expected.
   // The len parameter holds the byte length of the expected id or value.
-  void assert_attribute(size_t max, const vind& len, const v8 got[/*max*/],
+  void assert_attribute(size_t max, const v8& len, const v8 got[/*max*/],
                         const OpenedAttribute& oa) const {
     // Copy the attribute id and value into a single array.
     v8 want[96];

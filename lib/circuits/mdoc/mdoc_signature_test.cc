@@ -348,12 +348,7 @@ void mdoc_hash_run(const typename Field::Elt &omega, uint64_t omega_order,
     std::vector<typename MdocHash::OpenedAttribute> oa(attrs.size());
     MdocHash mdoc_hash(LC);
     for (size_t ai = 0; ai < attrs.size(); ++ai) {
-      for (size_t j = 0; j < 32; ++j) {
-        oa[ai].attr[j] = LC.template vinput<8>();
-      }
-      for (size_t j = 0; j < 64; ++j) {
-        oa[ai].v1[j] = LC.template vinput<8>();
-      }
+      oa[ai].input(LC);
     }
 
     v8 now[20];
@@ -381,10 +376,10 @@ void mdoc_hash_run(const typename Field::Elt &omega, uint64_t omega_order,
   constexpr size_t t_ind = 3;
   const uint8_t *mdoc = mdoc_tests[t_ind].mdoc;
 
-  bool ok = hw.compute_witness(mdoc, mdoc_tests[t_ind].mdoc_size,
-                               mdoc_tests[t_ind].transcript,
-                               mdoc_tests[t_ind].transcript_size, attrs.data(),
-                               attrs.size(), mdoc_tests[t_ind].now);
+  bool ok = hw.compute_witness(
+      mdoc, mdoc_tests[t_ind].mdoc_size, mdoc_tests[t_ind].transcript,
+      mdoc_tests[t_ind].transcript_size, attrs.data(), attrs.size(),
+      mdoc_tests[t_ind].now, 4 /* version */);
 
   check(ok, "Could not compute hash witness");
 
@@ -399,8 +394,8 @@ void mdoc_hash_run(const typename Field::Elt &omega, uint64_t omega_order,
   pub_filler.push_back(F.one());
 
   for (size_t ai = 0; ai < attrs.size(); ++ai) {
-    fill_attribute(filler, attrs[ai], F);
-    fill_attribute(pub_filler, attrs[ai], F);
+    fill_attribute(filler, attrs[ai], F, 4 /* version */);
+    fill_attribute(pub_filler, attrs[ai], F, 4 /* version */);
   }
   fill_bit_string(filler, mdoc_tests[t_ind].now, 20, 20, F);
   fill_bit_string(pub_filler, mdoc_tests[t_ind].now, 20, 20, F);

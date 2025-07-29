@@ -138,6 +138,42 @@ TEST_F(MdocZKTest, one_claim) {
   }
 }
 
+TEST_F(MdocZKTest, long_attribute) {
+  uint8_t *zkproof;
+  size_t proof_len;
+  RequestedAttribute attrs[1] = {test::age_over_18};
+  auto test = &mdoc_tests[0];
+  {
+    log(INFO, "starting prover");
+    MdocProverErrorCode ret = run_mdoc_prover(
+        circuit1_, circuit_len1_, test->mdoc, test->mdoc_size,
+        test->pkx.as_pointer, test->pky.as_pointer, test->transcript,
+        test->transcript_size, attrs, 1, (const char *)test->now, &zkproof,
+        &proof_len, &kZkSpecs[0]);
+    EXPECT_EQ(ret, MDOC_PROVER_SUCCESS);
+  }
+
+  // Attr is too long.
+  RequestedAttribute long_attr[1] = {
+      {{'a', 'g', 'e', '_', 'o', 'v', 'e', 'r', '_', '1', '8',
+        '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+        '0', '0', '0', '0', '0', '0', '0', '0', '0', '0'},
+       {0xf5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0,    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0,    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+       32,
+       64,
+       kString}};
+
+  MdocVerifierErrorCode ret = run_mdoc_verifier(
+      circuit1_, circuit_len1_, test->pkx.as_pointer, test->pky.as_pointer,
+      test->transcript, test->transcript_size, long_attr, 1,
+      (const char *)test->now, zkproof, proof_len, test->doc_type,
+      &kZkSpecs[0]);
+  EXPECT_EQ(ret, MDOC_VERIFIER_GENERAL_FAILURE);
+  free(zkproof);
+}
+
 TEST_F(MdocZKTest, two_claims) {
   const TwoClaims two_tests[] = {
       {
@@ -219,7 +255,7 @@ TEST_F(MdocZKTest, bad_arguments) {
       test::age_over_18,
   };
   uint8_t tr[100] = {0};
-  uint8_t zkproof[30000]= {0};
+  uint8_t zkproof[30000] = {0};
   uint8_t circuit[60000] = {0};
   uint8_t mdoc[60000] = {0};
   const char *pk = "0x15";
@@ -345,6 +381,7 @@ TEST_F(MdocZKTest, bad_arguments) {
                               attrs, 0, now, zkproof, sizeof(zkproof),
                               kDefaultDocType, &zk_spec_1),
             MDOC_VERIFIER_ARGUMENTS_TOO_SMALL);
+
   // Broken now.
   EXPECT_EQ(run_mdoc_verifier(circuit, sizeof(circuit), pk, pk, tr, sizeof(tr),
                               attrs, num_attrs, nullptr, zkproof,
@@ -415,6 +452,35 @@ TEST_F(MdocZKTest, bad_proofs) {
         &zk_spec_1);
     EXPECT_NE(ret, MDOC_VERIFIER_SUCCESS);
   }
+}
+
+TEST(CircuitGenerationTest, attempt_to_generate_old_circuit) {
+  set_log_level(ERROR);
+  constexpr int num_attrs = 1;
+
+  // Find the smallest version of the circuit for the given number of
+  // attributes.
+  const ZkSpecStruct *old_zk_spec = nullptr;
+  int num_circuits = 0;
+  for (int i = 0; i < kNumZkSpecs; ++i) {
+    if (kZkSpecs[i].num_attributes == num_attrs) {
+      num_circuits++;
+      if (old_zk_spec == nullptr ||
+          kZkSpecs[i].version < old_zk_spec->version) {
+        old_zk_spec = &kZkSpecs[i];
+      }
+    }
+  }
+
+  EXPECT_GE(num_circuits, 1);
+  if (num_circuits == 1) {
+    return;  // No old circuit to test against, it's OK to skip this test.
+  }
+
+  static uint8_t *circuit = nullptr;
+  static size_t circuit_len;
+  EXPECT_EQ(generate_circuit(old_zk_spec, &circuit, &circuit_len),
+            CIRCUIT_GENERATION_INVALID_ZK_SPEC_VERSION);
 }
 
 static const Claims benchmark_claim = {

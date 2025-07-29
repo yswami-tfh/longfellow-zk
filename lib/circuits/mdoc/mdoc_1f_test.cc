@@ -185,7 +185,7 @@ TEST(jwt, EvalJWT) {
   std::vector<RequestedAttribute> oa;
   oa.push_back(test::age_over_18);
 
-  uint8_t want[] = {'a', 'g', 'e',  '_', 'o', 'v', 'e', 'r', '_',
+  uint8_t want[] = {0x6B, 'a', 'g', 'e',  '_', 'o', 'v', 'e', 'r', '_',
                     '1', '8', 0x6C, 'e', 'l', 'e', 'm', 'e', 'n',
                     't', 'V', 'a',  'l', 'u', 'e', 0xF5};
   std::vector<MDL::OpenedAttribute> oa2;
@@ -197,6 +197,8 @@ TEST(jwt, EvalJWT) {
       } else {
         oa2i.attr[j] = L.vbit<8>(0);
       }
+      size_t len = sizeof(want);
+      oa2i.len = L.vbit<8>(len);
     }
     oa2.push_back(oa2i);
   }
@@ -232,8 +234,8 @@ std::unique_ptr<Circuit<Fp256Base>> make_mdoc1f_circuit(const Fp256Base& f) {
 
   // Add opened attributes and now.
   MDL::OpenedAttribute oa2i[1];
-  for (size_t j = 0; j < 96; ++j) {
-    oa2i[0].attr[j] = lc.vinput<8>();
+  for (size_t j = 0; j < 1; ++j) {
+    oa2i[j].input(lc);
   }
 
   v8 now[kMdoc1DateLen];
@@ -274,7 +276,7 @@ void fill_input(Dense<Fp256Base>& W, const MdocTests& t0, const Fp256Base& f,
   filler.push_back(rmw.e2_);
 
   for (size_t i = 0; i < oa.size(); ++i) {
-    fill_attribute(filler, oa[i], f, 3);
+    fill_attribute(filler, oa[i], f, 4);
   }
 
   for (size_t j = 0; j < kMdoc1DateLen; ++j) {

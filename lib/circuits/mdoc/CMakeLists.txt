@@ -15,8 +15,7 @@
 add_library(mdoc mdoc_zk.cc zk_spec.cc)
 target_link_libraries(mdoc flatsha ec algebra util zstd)
 
-add_library(mdoc_static STATIC mdoc_zk.cc zk_spec.cc)
-target_link_libraries(mdoc_static
+add_library(mdoc_static STATIC mdoc_zk.cc zk_spec.cc
     $<TARGET_OBJECTS:flatsha>
     $<TARGET_OBJECTS:ec>
     $<TARGET_OBJECTS:algebra>

@@ -318,21 +318,28 @@ Nat nat_from_hash(const uint8_t data[], size_t len) {
   return ne;
 }
 
+// Append the cbor encoding of the length of a bytestring to buf.
+// This method handles bytestrings that are up to 255 bytes long.
 static inline void append_bytes_len(std::vector<uint8_t>& buf, size_t len) {
-  if (len > 256) {
-    uint8_t ll[] = {0x59, (uint8_t)((len >> 8) & 0xff), (uint8_t)(len & 0xff)};
-    buf.insert(buf.end(), ll, ll + 3);
-  } else {
+  check(len < 65536, "Bytestring length too large");
+  if (len < 24) {
+    buf.push_back(0x40 + len);
+  } else if (len < 256) {
     uint8_t ll[] = {0x58, static_cast<uint8_t>(len & 0xff)};
     buf.insert(buf.end(), ll, ll + 2);
+  } else {
+    uint8_t ll[] = {0x59, (uint8_t)((len >> 8) & 0xff), (uint8_t)(len & 0xff)};
+    buf.insert(buf.end(), ll, ll + 3);
   }
 }
 
+// Append the cbor encoding of the length of a text string to buf.
+// This method handles text strings that are up to 255 bytes long.
 static inline void append_text_len(std::vector<uint8_t>& buf, size_t len) {
   check(len < 256, "Text length too large");
   if (len < 24) {
     buf.push_back(0x60 + len);
-  } else if (len < 255) {
+  } else if (len < 256) {
     buf.push_back(0x78);
     buf.push_back(len);
   }
@@ -368,7 +375,7 @@ static Nat compute_transcript_hash(
   };
   std::vector<uint8_t> deviceNameSpacesBytes = {0xD8, 0x18, 0x41, 0xA0};
 
-  if (docType != nullptr) {
+  if (docType != nullptr && docType->size() < 256) {
     docTypeBytes.clear();
     append_text_len(docTypeBytes, docType->size());
     docTypeBytes.insert(docTypeBytes.end(), docType->begin(), docType->end());
@@ -420,54 +427,66 @@ void fill_byte(std::vector<typename Field::Elt>& v, uint8_t b, size_t i,
 }
 
 template <class Field>
-void fill_attribute(DenseFiller<Field> &filler, const RequestedAttribute &attr,
-                    const Field &F, size_t version = 2) {
-  if (version <= 2) {
-    fill_bit_string(filler, attr.id, attr.id_len, 32, F);
-    fill_bit_string(filler, attr.value, attr.value_len, 64, F);
-  } else if (version == 3) {
-    // In version 3, the attribute is encoded as the raw cbor string that
-    // included <name of identifier> <elementValue> <attributeValue>
-    std::vector<typename Field::Elt> v(96 * 8, F.of_scalar(0));
+bool fill_attribute(DenseFiller<Field>& filler, const RequestedAttribute& attr,
+                    const Field& F, size_t version) {
+  // In version 3, the attribute is encoded as the raw cbor string that
+  // included <name of identifier> <elementValue> <attributeValue>.
+  // In version 4, the attribute is encoded as
+  // <len(identifier)> <name of identifier> <elementValue> <attributeValue>.
+  // This extra length field distinguishes the two attributes:
+  //   "aamva/domestic_driving_privileges" from "iso/driving_privileges." No
+  // other valid attribute name is a proper suffix of another.  See the
+  // mdoc_attribute_ids.h file for the full list of attribute names and our
+  // restrictions.
 
-    size_t i = 0;
-    for (size_t j = 0; j < attr.id_len && i < 96; ++j, ++i) {
-      fill_byte(v, attr.id[j], i, F);
-    }
-    fill_byte(v, 0x6C, i++, F);  // Cbor type for length 12 string.
-    const char* ev = "elementValue";
-    for (size_t j = 0; j < 12 && i < 96; ++j, ++i) {
-      fill_byte(v, ev[j], i, F);
-    }
-    std::vector<uint8_t> vbuf;
-    uint8_t tag[] = {0xD9, 0x03, 0xEC, 0x6A};
-    switch (attr.type) {
-      case CborAttributeType::kPrimitive:
-        vbuf.push_back(attr.value[0]);
-        break;
-      case CborAttributeType::kString:
-        append_text_len(vbuf, attr.value_len);
-        vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
-        break;
-      case CborAttributeType::kBytes:
-        append_bytes_len(vbuf, attr.value_len);
-        vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
-        break;
-      case CborAttributeType::kDate:
-        vbuf.insert(vbuf.end(), tag, tag + 4);
-        vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
-        break;
-      case CborAttributeType::kInt:
-        vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
-        break;
-    }
-    for (size_t j = 0; j < vbuf.size() && i < 96; ++j, ++i) {
-      fill_byte(v, vbuf[j], i, F);
-    }
-    filler.push_back(v);
+  std::vector<uint8_t> vbuf;
+  std::vector<typename Field::Elt> v(96 * 8, F.zero());
+
+  if (version >= 4) {
+    // Append the length of the elementIdentifier.
+    append_text_len(vbuf, attr.id_len);
   }
-}
+  vbuf.insert(vbuf.end(), attr.id, attr.id + attr.id_len);
+  append_text_len(vbuf, 12);  // len of "elementValue"
+  const char* ev = "elementValue";
+  vbuf.insert(vbuf.end(), ev, ev + 12);
 
+  uint8_t tag[] = {0xD9, 0x03, 0xEC, 0x6A};
+  switch (attr.type) {
+    case CborAttributeType::kPrimitive:
+      vbuf.push_back(attr.value[0]);
+      break;
+    case CborAttributeType::kString:
+      append_text_len(vbuf, attr.value_len);
+      vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
+      break;
+    case CborAttributeType::kBytes:
+      append_bytes_len(vbuf, attr.value_len);
+      vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
+      break;
+    case CborAttributeType::kDate:
+      vbuf.insert(vbuf.end(), tag, tag + 4);
+      vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
+      break;
+    case CborAttributeType::kInt:
+      vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
+      break;
+  }
+  if (vbuf.size() > 96) {
+    log(ERROR, "Attribute %s is too long: %zu", attr.id, vbuf.size());
+    return false;
+  }
+  size_t len = 0;
+  for (size_t j = 0; j < vbuf.size() && len < 96; ++j, ++len) {
+    fill_byte(v, vbuf[j], len, F);
+  }
+  filler.push_back(v);
+  if (version >= 4) {
+    // In version 4, add the OpenedAttribute.len field.
+    filler.push_back(len, 8, F);
+  }
+  return true;
+}
 
 template <class EC, class ScalarField>
 class MdocSignatureWitness {
@@ -640,7 +659,7 @@ class MdocHashWitness {
   bool compute_witness(const uint8_t mdoc[/* len */], size_t len,
                        const uint8_t transcript[/* tlen */], size_t tlen,
                        const RequestedAttribute attrs[], size_t attrs_len,
-                       const uint8_t tnow[/*20*/], size_t version = 2) {
+                       const uint8_t tnow[/*20*/], size_t version) {
     if (!pm_.parse_device_response(len, mdoc)) {
       log(ERROR, "Failed to parse device response");
       return false;
@@ -694,10 +713,16 @@ class MdocHashWitness {
               &attr_bytes_[i][0], &atw_[i][0]);
           attr_mso_[i] = fa.mso;
           attr_ei_[i].offset = fa.id_ind - fa.tag_ind;
-          attr_ei_[i].len = fa.id_len;
-          if (version > 2) {
-            attr_ei_[i].len = fa.witness_length(attrs[i]);
+          if (version >= 4) {
+            // In version 4, the attribute id is encoded as the length of the
+            // id followed by the id.  The witness starts at the id, so we
+            // subtract 1 or 2 to get the offset, depending on the id length.
+            attr_ei_[i].offset -= 1;
+            if (fa.id_len > 23) {
+              attr_ei_[i].offset -= 1;
+            }
           }
+          attr_ei_[i].len = fa.witness_length(attrs[i]);
           attr_ev_[i].offset = fa.val_ind - fa.tag_ind;
           attr_ev_[i].len = fa.val_len;
           found = true;

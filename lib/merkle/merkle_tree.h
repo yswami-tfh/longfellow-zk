@@ -101,18 +101,6 @@ class MerkleTree {
     return layers_[1];
   }
 
-  // The generate_proof method writes a Merkle tree proof for the leaf
-  // at position pos into the proof array and returns the size of the proof
-  // in number of Digests.
-  size_t generate_proof(Digest proof[/*logn+1*/], size_t pos) const {
-    Digest* begin = proof;
-    *proof++ = layers_[pos + n_];
-    for (pos += n_; pos > 1; pos >>= 1) {
-      *proof++ = layers_[pos ^ 1];
-    }
-    return (proof - begin);
-  }
-
   // Compressed Merkle proofs over a set POS[NP] of leaves.
   //
   // We first compute the set TREE of all nodes that are on the path
@@ -154,14 +142,6 @@ class MerkleTreeVerifier {
  public:
   explicit MerkleTreeVerifier(size_t n, const Digest& root)
       : n_(n), root_(root) {}
-
-  bool verify_proof(const Digest* proof, size_t pos) const {
-    Digest t = *proof++;
-    for (pos += n_; pos > 1; pos >>= 1) {
-      t = (pos & 1) ? Digest::hash2(*proof++, t) : Digest::hash2(t, *proof++);
-    }
-    return t == root_;
-  }
 
   bool verify_compressed_proof(const Digest* proof, size_t proof_len,
                                const Digest leaves[/*np*/],

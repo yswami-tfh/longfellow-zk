@@ -19,6 +19,7 @@
 #include "algebra/fp.h"
 #include "circuits/compiler/circuit_dump.h"
 #include "circuits/compiler/compiler.h"
+#include "circuits/logic/bit_plucker_constants.h"
 #include "circuits/logic/bit_plucker_encoder.h"
 #include "circuits/logic/compiler_backend.h"
 #include "circuits/logic/evaluation_backend.h"
@@ -85,6 +86,66 @@ TEST(BitPlucker, PluckSize) {
   pluck_size<8>();
 }
 
+TEST(BitPlucker, EltMuxer) {
+  const Field F("257");
+  const EvalBackend ebk(F);
+  const Logic L(&ebk, F);
+  using EltW = typename Logic::EltW;
+  const EltW zero = L.konst(0);
+  const EltW one = L.konst(1);
+
+  EltW arr_z[] = {zero, one, one, one, one, one, one, one};
+  EltW arr_e[] = {zero, one, zero, one, zero, one, zero, one};
+  EltW arr_r[] = {zero, zero, one, one, zero, zero, one, one};
+  EltW arr_s[] = {zero, zero, zero, zero, one, one, one, one};
+
+  const EltMuxer<Logic, 8> em_z(L, arr_z);
+  const EltMuxer<Logic, 8> em_e(L, arr_e);
+  const EltMuxer<Logic, 8> em_r(L, arr_r);
+  const EltMuxer<Logic, 8> em_s(L, arr_s);
+
+  for (size_t i = 0; i < 8; ++i) {
+    auto enc = bit_plucker_point<Field, 8>()(i, F);
+
+    EltW range = em_z.mux(L.konst(enc));
+    L.assert_eq(&range, arr_z[i]);
+
+    range = em_e.mux(L.konst(enc));
+    L.assert_eq(&range, arr_e[i]);
+
+    range = em_r.mux(L.konst(enc));
+    L.assert_eq(&range, arr_r[i]);
+
+    range = em_s.mux(L.konst(enc));
+    L.assert_eq(&range, arr_s[i]);
+  }
+}
+
+// Test use of the EltMuxer machinery to test whether a smaller muxer input
+// is in range. In this case, we want to test whether the muxed input is in
+// {0,1,2,3,4,5,6,7}. We want to ensure that there are no false positives and
+// thus the test iterates over the entire field.
+TEST(BitPlucker, EltMuxer9) {
+  const Field F("257");
+  const EvalBackend ebk(F);
+  const Logic L(&ebk, F);
+  using EltW = typename Logic::EltW;
+  const EltW zero = L.konst(0);
+  const EltW one = L.konst(1);
+
+  EltW arr_v[] = {zero, zero, zero, zero, zero, zero, zero, zero, one};
+  const EltMuxer<Logic, 9, 8> em2(L, arr_v);
+  for (size_t i = 0; i < 128; ++i) {
+    auto enc = bit_plucker_point<Field, 8>()(i, F);
+    EltW range = em2.mux(L.konst(enc));
+    if (i < 9) {
+      L.assert_eq(&range, arr_v[i]);
+    } else {
+      auto ee = range.elt();
+      EXPECT_NE(ee, F.zero());
+    }
+  }
+}
+
 }  // namespace
 }  // namespace proofs
-
