@@ -9,6 +9,7 @@ The Longfellow library enables the construction of  zero-knowledge protocols con
 
 * [Anonymous credentials from ECDSA](https://eprint.iacr.org/2024/2010)
 * [libzk: A C++ Library for Zero-Knowledge Proofs](https://datatracker.ietf.org/doc/draft-google-cfrg-libzk/)
+* [Project documentation](https://google.github.io/longfellow-zk/)
 
 It is named after the bridge outside the Google Cambridge office.
 
