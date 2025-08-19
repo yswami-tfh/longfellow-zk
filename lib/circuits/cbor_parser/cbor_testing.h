@@ -20,6 +20,7 @@
 #include "circuits/cbor_parser/cbor.h"
 #include "circuits/cbor_parser/cbor_constants.h"
 #include "circuits/cbor_parser/cbor_witness.h"
+#include "circuits/logic/counter.h"
 #include "circuits/logic/evaluation_backend.h"
 #include "circuits/logic/logic.h"
 
@@ -67,6 +68,7 @@ class CborTesting {
       const typename CborWitnessF::global_witness &gwS) const {
     const EvalBackend ebk(f_);
     const LogicF L(&ebk, f_);
+    const Counter<LogicF> CTR(L);
 
     for (size_t i = 0; i < n; ++i) {
       for (size_t j = 0; j < 8; ++j) {
@@ -76,7 +78,7 @@ class CborTesting {
     }
 
     gw.invprod_decode = L.konst(gwS.invprod_decode);
-    gw.cc0 = L.konst(gwS.cc0);
+    gw.cc0_counter = CTR.as_counter(gwS.cc0_counter);
     gw.invprod_parse = L.konst(gwS.invprod_parse);
   }
 

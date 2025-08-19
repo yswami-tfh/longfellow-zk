@@ -20,13 +20,14 @@
 #include <vector>
 
 namespace proofs {
-template <class Logic>
+template <class Counter>
 class Scan {
  public:
-  using EltW = typename Logic::EltW;
+  using Logic = typename Counter::Logic;
+  using CEltW = typename Counter::CEltW;
   using BitW = typename Logic::BitW;
 
-  explicit Scan(const Logic& l) : l_(l) {}
+  explicit Scan(const Counter& ctr) : ctr_(ctr) {}
 
   /* Segmented prefix add, equivalent to this code:
 
@@ -40,19 +41,19 @@ class Scan {
          B[i] = s;
        }
   */
-  void add(size_t n, EltW B[/*n*/], const BitW S[/*n*/], const EltW A[/*n*/],
-           const EltW ds[/*n*/]) {
-    const Logic& L = l_;  // shorthand
+  void add(size_t n, CEltW B[/*n*/], const BitW S[/*n*/], const CEltW A[/*n*/],
+           const CEltW ds[/*n*/]) {
+    const Counter& CTR = ctr_;  // shorthand
     std::vector<BitW> S1(n);
     for (size_t i = 0; i < n; ++i) {
       S1[i] = S[i];
-      B[i] = L.mux(&S[i], &A[i], ds[i]);
+      B[i] = CTR.mux(&S[i], &A[i], ds[i]);
     }
     scan_add(0, n, S1.data(), B);
   }
 
   // unsegmented variant of add(), assume S[i] = false
-  void add(size_t n, EltW B[/*n*/], const EltW ds[/*n*/]) {
+  void add(size_t n, CEltW B[/*n*/], const CEltW ds[/*n*/]) {
     for (size_t i = 0; i < n; ++i) {
       B[i] = ds[i];
     }
@@ -60,11 +61,12 @@ class Scan {
   }
 
  private:
-  const Logic& l_;
+  const Counter& ctr_;
 
-  void scan_add(size_t i0, size_t i1, BitW S[/*n*/], EltW B[/*n*/]) {
+  void scan_add(size_t i0, size_t i1, BitW S[/*n*/], CEltW B[/*n*/]) {
     if (i1 - i0 > 1) {
-      const Logic& L = l_;  // shorthand
+      const Counter& CTR = ctr_;  // shorthand
+      const Logic& L = CTR.logic();
       size_t im = i0 + (i1 - i0) / 2;
       scan_add(i0, im, S, B);
       scan_add(im, i1, S, B);
@@ -72,26 +74,27 @@ class Scan {
       size_t j = im - 1;
       for (size_t i = im; i < i1; ++i) {
         // special case of B[i] = S[i] ? B[i] : B[i] + B[j]
-        // coded as B[i] = B[i] + (~S[i] * B[j])
-        auto ns = L.lnot(S[i]);
-        auto ns_bj = L.lmul(&ns, B[j]);
-        B[i] = L.add(&B[i], ns_bj);
+        // coded as B[i] = B[i] + ite0(~S[i], B[j])
+        BitW ns = L.lnot(S[i]);
+        CEltW ns_bj = CTR.ite0(&ns, B[j]);
+        B[i] = CTR.add(&B[i], ns_bj);
         S[i] = L.lor(&S[i], S[j]);
       }
     }
   }
 
   // unsegmented
-  void scan_add(size_t i0, size_t i1, EltW B[/*n*/]) {
+  void scan_add(size_t i0, size_t i1, CEltW B[/*n*/]) {
     if (i1 - i0 > 1) {
-      const Logic& L = l_;  // shorthand
+      const Counter& CTR = ctr_;  // shorthand
+
       size_t im = i0 + (i1 - i0) / 2;
       scan_add(i0, im, B);
       scan_add(im, i1, B);
 
       size_t j = im - 1;
       for (size_t i = im; i < i1; ++i) {
-        B[i] = L.add(&B[j], B[i]);
+        B[i] = CTR.add(&B[j], B[i]);
       }
     }
   }

@@ -23,11 +23,11 @@
 #include <vector>
 
 #include "algebra/hash.h"
-#include "circuits/compiler/circuit_id.h"
 #include "circuits/compiler/node.h"
 #include "circuits/compiler/pdqhash.h"
 #include "circuits/compiler/schedule.h"
 #include "sumcheck/circuit.h"
+#include "sumcheck/circuit_id.h"
 #include "sumcheck/quad.h"
 #include "util/panic.h"
 

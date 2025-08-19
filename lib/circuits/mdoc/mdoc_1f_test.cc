@@ -27,6 +27,7 @@
 #include "circuits/compiler/compiler.h"
 #include "circuits/logic/bit_plucker_encoder.h"
 #include "circuits/logic/compiler_backend.h"
+#include "circuits/logic/counter.h"
 #include "circuits/logic/evaluation_backend.h"
 #include "circuits/logic/logic.h"
 #include "circuits/mdoc/mdoc_1f_io.h"
@@ -103,6 +104,7 @@ void copy_cbor_index(T& to, const S& from, const Logic& L, size_t offset = 0) {
 
 template <class MW, class RMW, class Logic>
 void fill_eval_witness(MW& vw, const RMW& rvw, const Logic& L) {
+  const Counter<Logic> CTR(L);
   vw.e_ = L.konst(rvw.e_);
 
   copy_sig(vw.sig_, rvw.ew_, L);
@@ -126,7 +128,7 @@ void fill_eval_witness(MW& vw, const RMW& rvw, const Logic& L) {
     vw.pwcb_[i].encoded_sel_header = L.konst(rvw.pwcb_[i].encoded_sel_header);
   }
   vw.gwcb_.invprod_decode = L.konst(rvw.gwcb_.invprod_decode);
-  vw.gwcb_.cc0 = L.konst(rvw.gwcb_.cc0);
+  vw.gwcb_.cc0_counter = CTR.as_counter(rvw.gwcb_.cc0_counter);
   vw.gwcb_.invprod_parse = L.konst(rvw.gwcb_.invprod_parse);
 
   // The cbor indices need to be offset by the value of prepad because

@@ -118,14 +118,14 @@ class VerifierLayers {
                       const LayerProof<Field>* plr, LayerChallenge<Field>* ch,
                       TranscriptSumcheck<Field>& ts, const Field& F) {
     for (size_t round = 0; round < logc; ++round) {
-      // (p(0) + p(1))
-      Elt got = F.addf(plr->cp[round].t_[0], plr->cp[round].t_[1]);
-      if (got != *claim) {
-        *why = "got != claim (round_c)";
-        return false;
-      }
+      // Change verification equation from
+      //    claim =? (p(0) + p(1))
+      // to p(1) = claim - p(0).
+      auto tp = plr->cp[round];
+      auto t1 = F.subf(*claim, tp.t_[0]);
       ch->cb[round] = ts.round(plr->cp[round]);
-      *claim = plr->cp[round].eval_lagrange(ch->cb[round], F);
+      auto p = tp.to_poly(t1);
+      *claim = p.eval_lagrange(ch->cb[round], F);
     }
 
     return true;
@@ -136,15 +136,14 @@ class VerifierLayers {
                       TranscriptSumcheck<Field>& ts, const Field& F) {
     for (size_t round = 0; round < logw; ++round) {
       for (size_t hand = 0; hand < 2; ++hand) {
-        // (p(0) + p(1))
-        Elt got =
-            F.addf(plr->hp[hand][round].t_[0], plr->hp[hand][round].t_[1]);
-        if (got != *claim) {
-          *why = "got != claim (round_h)";
-          return false;
-        }
-        ch->hb[hand][round] = ts.round(plr->hp[hand][round]);
-        *claim = plr->hp[hand][round].eval_lagrange(ch->hb[hand][round], F);
+        // Change verification equation from
+        //    claim =? (p(0) + p(1))
+        // to p(1) = claim - p(0).
+        auto tp = plr->hp[hand][round];
+        auto t1 = F.subf(*claim, tp.t_[0]);
+        ch->hb[hand][round] = ts.round(tp);
+        auto p = tp.to_poly(t1);
+        *claim = p.eval_lagrange(ch->hb[hand][round], F);
       }
     }
     return true;

@@ -26,10 +26,10 @@
 namespace proofs {
 namespace {
 using Field = Fp<1>;
+const Field F("18446744073709551557");
 using EvaluationBackend = EvaluationBackend<Field>;
 using Logic = Logic<Field, EvaluationBackend>;
 using EltW = Logic::EltW;
-const Field F("18446744073709551557");
 
 TEST(Logic, Assert0) {
   const EvaluationBackend ebk(F);
@@ -450,6 +450,11 @@ TEST(Logic, Bitvec) {
     auto ea = L.vbit<w>(a);
     auto nea = L.vnot(ea);
     EXPECT_TRUE(L.vequal(&nea, L.vbit<w>(~a)));
+
+    // as_scalar() of the bitvec produces the constant A
+    // that we started with
+    EXPECT_EQ(L.konst(a), L.as_scalar(ea));
+
     for (size_t b = 0; b < (1 << w); ++b) {
       auto eb = L.vbit<w>(b);
       auto vand = L.vand(&ea, eb);

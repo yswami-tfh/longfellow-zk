@@ -37,7 +37,6 @@
 #include "util/log.h"
 #include "util/panic.h"
 
-
 namespace proofs {
 
 struct CborIndex {
@@ -74,17 +73,8 @@ struct FullAttribute {
     return y.id_len == id_len && memcmp(y.id, &doc[id_ind], id_len) == 0;
   }
 
-  size_t witness_length(const RequestedAttribute&  attr) {
-    size_t r = id_len + val_len + 1 + 12;
-    if (attr.type == CborAttributeType::kDate) {
-      r += 4;
-    } else if (attr.type == CborAttributeType::kString ||
-               attr.type == CborAttributeType::kBytes) {
-      r += 1;
-      if (val_len > 23) r++;
-      if (val_len > 255) r++;
-    }
-    return r;
+  size_t witness_length(const RequestedAttribute& attr) {
+    return id_len + val_len + 1 + 12;
   }
 };
 
@@ -422,7 +412,7 @@ template <class Field>
 void fill_byte(std::vector<typename Field::Elt>& v, uint8_t b, size_t i,
                const Field& F) {
   for (size_t j = 0; j < 8; ++j) {
-    v[i*8 + j] = ( b >> j & 0x1 ) ? F.one() : F.zero();
+    v[i * 8 + j] = (b >> j & 0x1) ? F.one() : F.zero();
   }
 }
 
@@ -451,27 +441,9 @@ bool fill_attribute(DenseFiller<Field>& filler, const RequestedAttribute& attr,
   const char* ev = "elementValue";
   vbuf.insert(vbuf.end(), ev, ev + 12);
 
-  uint8_t tag[] = {0xD9, 0x03, 0xEC, 0x6A};
-  switch (attr.type) {
-    case CborAttributeType::kPrimitive:
-      vbuf.push_back(attr.value[0]);
-      break;
-    case CborAttributeType::kString:
-      append_text_len(vbuf, attr.value_len);
-      vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
-      break;
-    case CborAttributeType::kBytes:
-      append_bytes_len(vbuf, attr.value_len);
-      vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
-      break;
-    case CborAttributeType::kDate:
-      vbuf.insert(vbuf.end(), tag, tag + 4);
-      vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
-      break;
-    case CborAttributeType::kInt:
-      vbuf.insert(vbuf.end(), attr.value, attr.value + attr.value_len);
-      break;
-  }
+  vbuf.insert(vbuf.end(), attr.cbor_value,
+              attr.cbor_value + attr.cbor_value_len);
+
   if (vbuf.size() > 96) {
     log(ERROR, "Attribute %s is too long: %zu", attr.id, vbuf.size());
     return false;

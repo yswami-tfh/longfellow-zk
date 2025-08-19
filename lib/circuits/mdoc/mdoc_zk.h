@@ -30,15 +30,14 @@ extern "C" {
 // for example age_over_18. The circuit generation can be run once, and the
 // result cached for subsequent use in the prover and verifier.
 
-enum CborAttributeType { kPrimitive, kString, kBytes, kDate, kInt };
-
 /* This struct allows a verifier to express which attribute and value the prover
- * must claim. */
+ * must claim.  The value should be passed as the raw bytes of the CBOR value.
+ */
 typedef struct {
+  uint8_t namespace_id[64];
   uint8_t id[32];
-  uint8_t value[64];
-  size_t id_len, value_len;
-  enum CborAttributeType type;
+  uint8_t cbor_value[64];
+  size_t namespace_len, id_len, cbor_value_len;
 } RequestedAttribute;
 
 // Return codes for the run_mdoc2_prover method.
@@ -97,6 +96,11 @@ typedef struct {
 } ZkSpecStruct;
 
 static const char kDefaultDocType[] = "org.iso.18013.5.1.mDL";
+
+// An upper-bound on the decompressed circuit size. It is better to make this
+// bound tight to avoid memory failure in the resource restricted Android
+// gmscore environment.
+static constexpr size_t kCircuitSizeMax = 150000000;
 
 // The run_mdoc2_prover method takes byte-oriented inputs that describe a
 // circuit, mdoc, the public key of the issuer for the mdoc, a transcript

@@ -17,7 +17,6 @@
 #include <cstdint>
 #include <vector>
 
-#include "algebra/fp.h"
 #include "circuits/cbor_parser/cbor.h"
 #include "circuits/cbor_parser/cbor_constants.h"
 #include "circuits/cbor_parser/cbor_testing.h"
@@ -25,12 +24,13 @@
 #include "circuits/logic/compiler_backend.h"
 #include "circuits/logic/evaluation_backend.h"
 #include "circuits/logic/logic.h"
+#include "gf2k/gf2_128.h"
 #include "gtest/gtest.h"
 
 namespace proofs {
 namespace {
-using Field = Fp<1>;
-const Field F("18446744073709551557");
+using Field = GF2_128<>;
+const Field F;
 
 using CborWitness = CborWitness<Field>;
 using CborTesting = CborTesting<Field>;
@@ -460,7 +460,7 @@ TEST(MSO, Example) {
   // sanity check on the output
   for (size_t i = 0; i < n; ++i) {
     for (size_t l = 0; l < CborConstants::kNCounters; ++l) {
-      EXPECT_EQ(F.of_scalar(pwS[i].cc_debug[l]), ps[i].c[l].elt());
+      EXPECT_EQ(F.as_counter(pwS[i].cc_debug[l]).e, ps[i].c[l].e.elt());
     }
   }
 

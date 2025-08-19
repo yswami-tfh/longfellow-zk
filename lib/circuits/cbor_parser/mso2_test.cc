@@ -18,7 +18,6 @@
 #include <memory>
 #include <vector>
 
-#include "algebra/fp_p256.h"
 #include "arrays/dense.h"
 #include "cbor/host_decoder.h"
 #include "circuits/cbor_parser/cbor.h"
@@ -28,8 +27,10 @@
 #include "circuits/compiler/circuit_dump.h"
 #include "circuits/compiler/compiler.h"
 #include "circuits/logic/compiler_backend.h"
+#include "circuits/logic/counter.h"
 #include "circuits/logic/evaluation_backend.h"
 #include "circuits/logic/logic.h"
+#include "gf2k/gf2_128.h"
 #include "sumcheck/circuit.h"
 #include "sumcheck/testing.h"
 #include "util/log.h"
@@ -37,8 +38,7 @@
 
 namespace proofs {
 namespace {
-
-using Field = Fp256<true>;
+using Field = GF2_128<>;
 const Field F;
 
 using CborWitness = CborWitness<Field>;
@@ -337,7 +337,7 @@ TEST(MSO, Various) {
   // sanity check on the output
   for (size_t i = 0; i < n; ++i) {
     for (size_t l = 0; l < CborConstants::kNCounters; ++l) {
-      EXPECT_EQ(F.of_scalar(pwS[i].cc_debug[l]), ps[i].c[l].elt());
+      EXPECT_EQ(F.as_counter(pwS[i].cc_debug[l]).e, ps[i].c[l].e.elt());
     }
   }
 
@@ -424,7 +424,7 @@ TEST(MSO, MapLookup) {
   // sanity check on the output
   for (size_t i = 0; i < n; ++i) {
     for (size_t l = 0; l < CborConstants::kNCounters; ++l) {
-      EXPECT_EQ(F.of_scalar(pwS[i].cc_debug[l]), ps[i].c[l].elt());
+      EXPECT_EQ(F.as_counter(pwS[i].cc_debug[l]).e, ps[i].c[l].e.elt());
     }
   }
 
@@ -460,11 +460,21 @@ TEST(MSO, MapLookup) {
                         ds.data(), ps.data());
   CBOR.assert_unsigned_at(n, jhashk, org_lookup_tag, ds.data());
 
-  // JHASHV is a 32-byte string
-  auto a4 = L.konst(L.elt(
-      "0x43CD174E9885F2F1F32DF4742F4F662EB18A9DCB82624B3165512E1EA241E1AC"));
+  // Old assertion that does not work in binary fields.
+  // The old assert_elt_as_be_bytes_at() has been removed
+  // and there is no point in replacing it with some other
+  // code that is not used except in tests.
+  //
+  // However, we leave this comment around because anybody
+  // who wants to use this test as a starting point will
+  // need to remember to compare the actual contents at jhashv
+  // against something.
 
-  CBOR.assert_elt_as_be_bytes_at(n, jhashv, 32, a4, ds.data());
+  // JHASHV is a 32-byte string
+  //
+  // auto a4 = L.konst(L.elt(
+  // "0x43CD174E9885F2F1F32DF4742F4F662EB18A9DCB82624B3165512E1EA241E1AC"));
+  // CBOR.assert_elt_as_be_bytes_at(n, jhashv, 32, a4, ds.data());
 }
 
 // test for real, prover and verifier
@@ -494,13 +504,12 @@ TEST(MSO, Example2Real) {
     QuadCircuit<Field> Q(F);
     const CompilerBackend cbk(&Q);
     const LogicCircuit LC(&cbk, F);
+    const Counter<LogicCircuit> CTRC(LC);
     using CborC = Cbor<LogicCircuit>;
     const CborC CBORC(LC);
     std::vector<CborC::v8> inC(n);
     std::vector<CborC::position_witness> pwC(n);
     CborC::global_witness gwC;
-
-    auto a4 = Q.input();
 
     auto input_lenC = LC.vinput<CborC::kIndexBits>();
     for (size_t i = 0; i < n; ++i) {
@@ -508,7 +517,7 @@ TEST(MSO, Example2Real) {
       pwC[i].encoded_sel_header = Q.input();
     }
     gwC.invprod_decode = Q.input();
-    gwC.cc0 = Q.input();
+    gwC.cc0_counter = CTRC.input();
     gwC.invprod_parse = Q.input();
 
     std::vector<CborC::decode> dsC(n);
@@ -558,11 +567,6 @@ TEST(MSO, Example2Real) {
                            psC.data());
     CBORC.assert_unsigned_at(n, jhashkC, org_lookup_tag, dsC.data());
 
-    // JHASHV is a 32-byte string
-    CBORC.assert_elt_as_be_bytes_at(n, jhashvC, 32, a4, dsC.data());
-
-    // CBORC.assert_bytes_at(n, jhashvC, 32, dsC.data());
-
     CIRCUIT = Q.mkcircuit(/*nc=*/1);
     dump_info<Field>("mso2 decode_and_assert_decode_and_parse", Q);
     ninput = Q.ninput();
@@ -583,9 +587,6 @@ TEST(MSO, Example2Real) {
   }
 
   // parsing witnesses
-  Field::Elt a4 = F.of_string(
-      "0x43CD174E9885F2F1F32DF4742F4F662EB18A9DCB82624B3165512E1EA241E1AC");
-
   std::vector<CborWitness::v8> inS(n);
   std::vector<CborWitness::position_witness> pwS(n);
   CborWitness::global_witness gwS;
@@ -620,7 +621,6 @@ TEST(MSO, Example2Real) {
   DenseFiller<Field> filler(*W);
 
   filler.push_back(F.one());
-  filler.push_back(a4);
   filler.push_back(CW.index(input_len));
 
   for (size_t i = 0; i < n; ++i) {
@@ -628,7 +628,7 @@ TEST(MSO, Example2Real) {
     filler.push_back(pwS[i].encoded_sel_header);
   }
   filler.push_back(gwS.invprod_decode);
-  filler.push_back(gwS.cc0);
+  filler.push_back(gwS.cc0_counter.e);
   filler.push_back(gwS.invprod_parse);
 
   // jroot

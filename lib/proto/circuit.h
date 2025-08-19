@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -27,6 +28,7 @@
 
 #include "algebra/hash.h"
 #include "sumcheck/circuit.h"
+#include "sumcheck/circuit_id.h"
 #include "sumcheck/quad.h"
 #include "util/ceildiv.h"
 #include "util/panic.h"
@@ -124,7 +126,11 @@ class CircuitRep {
 
   // Returns a unique_ptr<Circuit> or nullptr if there is an error in
   // deserializing the circuit.
-  std::unique_ptr<Circuit<Field>> from_bytes(ReadBuffer& buf) {
+  //
+  // If ENFORCE_CIRCUIT_ID is TRUE, check that the circuit id in
+  // the serialization matches the id stored in the circuit.
+  std::unique_ptr<Circuit<Field>> from_bytes(ReadBuffer& buf,
+                                             bool enforce_circuit_id) {
     if (!buf.have(8 * kBytesWritten + 1)) {
       return nullptr;
     }
@@ -230,6 +236,14 @@ class CircuitRep {
       return nullptr;
     }
     buf.next(32, c->id);
+
+    if (enforce_circuit_id) {
+      uint8_t idtmp[32];
+      circuit_id(idtmp, *c, f_);
+      if (memcmp(idtmp, c->id, 32) != 0) {
+        return nullptr;
+      }
+    }
     return c;
   }
 

@@ -19,32 +19,35 @@
 #include <cstdint>
 #include <vector>
 
-#include "algebra/fp.h"
 #include "circuits/cbor_parser/cbor_constants.h"
 #include "circuits/cbor_parser/cbor_pluck.h"
 #include "circuits/compiler/circuit_dump.h"
 #include "circuits/compiler/compiler.h"
 #include "circuits/logic/compiler_backend.h"
+#include "circuits/logic/counter.h"
 #include "circuits/logic/evaluation_backend.h"
 #include "circuits/logic/logic.h"
+#include "gf2k/gf2_128.h"
 #include "util/log.h"
 #include "gtest/gtest.h"
 
 namespace proofs {
 namespace {
-
-using Field = Fp<1>;
-const Field F("18446744073709551557");
+using Field = GF2_128<>;
+const Field F;
 
 using CompilerBackend = CompilerBackend<Field>;
 using LogicCircuit = Logic<Field, CompilerBackend>;
 
 using EvalBackend = EvaluationBackend<Field>;
 using Logic = Logic<Field, EvalBackend>;
+using CounterL = Counter<Logic>;
 
 TEST(CBOR, DecodeOneV8) {
   const EvalBackend ebk(F);
   const Logic L(&ebk, F);
+  const CounterL CTR(L);
+
   using Cbor = Cbor<Logic>;
   const Cbor CBOR(L);
   for (size_t type = 0; type < 8; ++type) {
@@ -67,7 +70,7 @@ TEST(CBOR, DecodeOneV8) {
       bool count_is_next_v8 = false;
       bool invalid = false;
       size_t length = ~0;  // bogus
-      size_t count_as_field_element = count;
+      size_t count_as_counter = count;
       if (atomp || tagp) {
         if (count0_23) {
           length = 1;
@@ -116,11 +119,12 @@ TEST(CBOR, DecodeOneV8) {
       EXPECT_EQ(L.eval(ds.count_is_next_v8), L.eval(L.bit(count_is_next_v8)));
       if (!invalid) {
         // the length is don't care unless valid
-        EXPECT_EQ(ds.length, L.konst(length));
+        EXPECT_EQ(ds.length.e, CTR.as_counter(length).e);
       }
 
-      EXPECT_EQ(ds.count_as_field_element, L.konst(count_as_field_element));
-      EXPECT_EQ(ds.as_field_element, L.konst(v));
+      EXPECT_EQ(ds.count_as_counter.e, CTR.as_counter(count_as_counter).e);
+      EXPECT_EQ(ds.as_counter.e, CTR.as_counter(v).e);
+      EXPECT_EQ(ds.as_scalar, L.konst(v));
 
       // This module is expected to set these bits to 0.
       // A later module fixes them up.
@@ -186,7 +190,7 @@ TEST(CBOR, VerifyDecode) {
   Cbor::global_witness gw;
 
   size_t slen = 1;
-  auto prod = L.elt(1);
+  auto prod = F.one();
   for (size_t i = 0; i < n; ++i) {
     in[i] = L.vbit<8>(testcase[i].v);
 
@@ -196,7 +200,7 @@ TEST(CBOR, VerifyDecode) {
       slen_next = testcase[i].len;
     } else {
       if (i > 0) {
-        prod = L.mulf(prod, L.elt(slenm1));
+        prod = F.mulf(prod, F.znz_indicator(F.as_counter(slenm1)));
       }
       slen_next = slenm1;
     }
@@ -207,7 +211,7 @@ TEST(CBOR, VerifyDecode) {
   }
 
   std::vector<Cbor::decode> ds(n);
-  gw.invprod_decode = L.konst(L.invertf(prod));
+  gw.invprod_decode = L.konst(F.invertf(prod));
   CBOR.decode_and_assert_decode(n, ds.data(), in.data(), pw.data(), gw);
 }
 
@@ -223,6 +227,7 @@ TEST(CBOR, VerifyParseSize) {
     const LogicCircuit LC(&cbk, F);
     using CborC = Cbor<LogicCircuit>;
     const CborC CBORC(LC);
+    const Counter<LogicCircuit> CTRC(LC);
 
     std::vector<CborC::v8> inC(n);
     std::vector<CborC::position_witness> pwC(n);
@@ -233,7 +238,7 @@ TEST(CBOR, VerifyParseSize) {
       pwC[j].encoded_sel_header = Q.input();
     }
     gwC.invprod_decode = Q.input();
-    gwC.cc0 = Q.input();
+    gwC.cc0_counter = CTRC.input();
     gwC.invprod_parse = Q.input();
 
     std::vector<CborC::decode> dsC(n);
@@ -246,7 +251,7 @@ TEST(CBOR, VerifyParseSize) {
     size_t nout = 0;
     for (size_t j = 0; j < n; ++j) {
       for (size_t l = 0; l < kNCounters; ++l) {
-        Q.output(psC[j].c[l], nout++);
+        Q.output(psC[j].c[l].e, nout++);
       }
     }
 

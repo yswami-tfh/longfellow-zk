@@ -20,49 +20,99 @@
 namespace proofs {
 namespace test {
 static const RequestedAttribute age_over_18 = {
-    {'a', 'g', 'e', '_', 'o', 'v', 'e', 'r', '_', '1', '8'},
-    {0xf5},
-    11,
-    1,
-    kPrimitive};
+    .namespace_id = {'o', 'r', 'g', '.', 'i', 's', 'o', '.', '1', '8', '0', '1',
+                     '3', '.', '5', '.', '1'},
+    .id = {'a', 'g', 'e', '_', 'o', 'v', 'e', 'r', '_', '1', '8'},
+    .cbor_value = {0xf5},
+    .namespace_len = 17,
+    .id_len = 11,
+    .cbor_value_len = 1};
 
 static const RequestedAttribute not_over_18 = {
+    .namespace_id = {'o', 'r', 'g', '.', 'i', 's', 'o', '.', '1', '8', '0', '1',
+                     '3', '.', '5', '.', '1'},
     .id = {'a', 'g', 'e', '_', 'o', 'v', 'e', 'r', '_', '1', '8'},
-    .value = {0xf4},
+    .cbor_value = {0xf4},
     .id_len = 11,
-    .value_len = 1,
-    .type = kPrimitive};
+    .cbor_value_len = 1};
+
+static const RequestedAttribute age_birth_year = {
+    .namespace_id = {'o', 'r', 'g', '.', 'i', 's', 'o', '.', '1', '8', '0', '1',
+                     '3', '.', '5', '.', '1'},
+    .id = {'a', 'g', 'e', '_', 'b', 'i', 'r', 't', 'h', '_', 'y', 'e', 'a',
+           'r'},
+    .cbor_value = {0x19, 0x07, 0xB0},
+    .namespace_len = 17,
+    .id_len = 14,
+    .cbor_value_len = 3};
 
 static const RequestedAttribute familyname_mustermann = {
+    .namespace_id = {'o', 'r', 'g', '.', 'i', 's', 'o', '.', '1', '8', '0', '1',
+                     '3', '.', '5', '.', '1'},
     .id = {'f', 'a', 'm', 'i', 'l', 'y', '_', 'n', 'a', 'm', 'e'},
-    .value = {'M', 'u', 's', 't', 'e', 'r', 'm', 'a', 'n', 'n'},
+    .cbor_value = {0x6A, 'M', 'u', 's', 't', 'e', 'r', 'm', 'a', 'n', 'n'},
+    .namespace_len = 17,
     .id_len = 11,
-    .value_len = 10,
-    .type = kString};
+    .cbor_value_len = 11};
 
 static const RequestedAttribute birthdate_1971_09_01 = {
+    .namespace_id = {'o', 'r', 'g', '.', 'i', 's', 'o', '.', '1', '8', '0', '1',
+                     '3', '.', '5', '.', '1'},
     .id = {'b', 'i', 'r', 't', 'h', '_', 'd', 'a', 't', 'e'},
-    .value = {'1', '9', '7', '1', '-', '0', '9', '-', '0', '1'},
+    .cbor_value = {0xD9, 0x03, 0xEC, 0x6A, '1', '9', '7', '1', '-', '0', '9',
+                   '-', '0', '1'},
+    .namespace_len = 17,
     .id_len = 10,
-    .value_len = 10,
-    .type = kDate};
+    .cbor_value_len = 14};
 
 static const RequestedAttribute birthdate_1998_09_04 = {
+    .namespace_id = {'o', 'r', 'g', '.', 'i', 's', 'o', '.', '1', '8', '0', '1',
+                     '3', '.', '5', '.', '1'},
     .id = {'b', 'i', 'r', 't', 'h', '_', 'd', 'a', 't', 'e'},
-    .value = {'1', '9', '9', '8', '-', '0', '9', '-', '0', '4'},
+    .cbor_value = {0xD9, 0x03, 0xEC, 0x6A, '1', '9', '9', '8', '-', '0', '9',
+                   '-', '0', '4'},
+    .namespace_len = 17,
     .id_len = 10,
-    .value_len = 10,
-    .type = kDate};
+    .cbor_value_len = 14};
+
+static const RequestedAttribute birthdate_1968_04_27 = {
+    .namespace_id = {'o', 'r', 'g', '.', 'i', 's', 'o', '.', '1', '8', '0', '1',
+                     '3', '.', '5', '.', '1'},
+    .id = {'b', 'i', 'r', 't', 'h', '_', 'd', 'a', 't', 'e'},
+    .cbor_value = {0xD9, 0x03, 0xEC, 0x6A, '1', '9', '6', '8', '-', '0', '4',
+                   '-', '2', '7'},
+    .namespace_len = 17,
+    .id_len = 10,
+    .cbor_value_len = 14};
 
 static const RequestedAttribute height_175 = {
-    {'h', 'e', 'i', 'g', 'h', 't'}, {0x18, 0xaf}, 6, 2, kInt};
+    .namespace_id = {'o', 'r', 'g', '.', 'i', 's', 'o', '.', '1', '8', '0', '1',
+                     '3', '.', '5', '.', '1'},
+    .id = {'h', 'e', 'i', 'g', 'h', 't'},
+    .cbor_value = {0x18, 0xaf},
+    .namespace_len = 17,
+    .id_len = 6,
+    .cbor_value_len = 2};
 
 static const RequestedAttribute issue_date_2024_03_15 = {
-    {'i', 's', 's', 'u', 'e', '_', 'd', 'a', 't', 'e'},
-    {'2', '0', '2', '4', '-', '0', '3', '-', '1', '5'},
-    10,
-    10,
-    kDate};
+    .namespace_id = {'o', 'r', 'g', '.', 'i', 's', 'o', '.', '1', '8', '0', '1',
+                     '3', '.', '5', '.', '1'},
+    .id = {'i', 's', 's', 'u', 'e', '_', 'd', 'a', 't', 'e'},
+    .cbor_value = {0xD9, 0x03, 0xEC, 0x6A, '2', '0', '2', '4', '-', '0', '3',
+                   '-', '1', '5'},
+    .namespace_len = 17,
+    .id_len = 10,
+    .cbor_value_len = 14};
+
+static const RequestedAttribute issue_date_2025_07_21 = {
+    .namespace_id = {'o', 'r', 'g', '.', 'i', 's', 'o', '.', '1', '8', '0', '1',
+                     '3', '.', '5', '.', '1'},
+    .id = {'i', 's', 's', 'u', 'e', '_', 'd', 'a', 't', 'e'},
+    .cbor_value = {0xc0, 0x74, '2', '0', '2', '5', '-', '0', '7', '-', '2',
+                   '1',  'T',  '0', '4', ':', '0', '0', ':', '0', '0', 'Z'},
+    .namespace_len = 17,
+    .id_len = 10,
+    .cbor_value_len = 22};
 
 }  // namespace test
 }  // namespace proofs

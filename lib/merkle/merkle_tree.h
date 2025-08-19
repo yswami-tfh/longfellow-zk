@@ -27,7 +27,17 @@
 namespace proofs {
 
 // This package computes and verifies Merkle Tree inclusion claims.
-// The standard Merkle tree algorithm has been implemented.
+// The folklore Merkle tree algorithm has been implemented, with the following
+// constraints:
+//   1. A Merkle tree proof must reveal at least one leaf. We do not define
+//      empty proofs.
+//   2. The list of leaves must be a set, i.e., with no duplicates.  All usage
+//      within this library satisfies this requirement because the FS methods
+//      that produce the challenge set of indices includes no duplicates.
+//   3. The generated proof of inclusion for a set of leaves is compressed.
+//      That is, if a node in the Merkle tree can be deduced, it is not included
+//      in the proof. This makes the proof shorter, but the proof length varies
+//      depending on the included leaves.
 
 // A digest of a Merkle tree.
 struct Digest {
@@ -71,6 +81,8 @@ inline std::vector<bool> compressed_merkle_proof_tree(size_t n,
   // leaves are in TREE
   for (size_t ip = 0; ip < np; ++ip) {
     check(pos[ip] < n, "Invalid position for leaf in Merkle tree");
+    check(tree[pos[ip] + n] == false,
+          "duplicate position in merkle tree requested");
     tree[pos[ip] + n] = true;
   }
 
@@ -106,7 +118,7 @@ class MerkleTree {
   // We first compute the set TREE of all nodes that are on the path
   // from the root to any leaf in POS.  Then, for each inner node in
   // TREE, we include in the proof the child that is not in TREE, if
-  // any.
+  // any.  Note, this method requires pos to contain no duplicates.
   size_t generate_compressed_proof(std::vector<Digest>& proof,
                                    const size_t pos[/*np*/], size_t np) {
     std::vector<bool> tree = compressed_merkle_proof_tree(n_, pos, np);
@@ -143,6 +155,8 @@ class MerkleTreeVerifier {
   explicit MerkleTreeVerifier(size_t n, const Digest& root)
       : n_(n), root_(root) {}
 
+  // Verify a compressed Merkle proof.
+  // As mentioned above, this method assumes that pos contains no duplicates.
   bool verify_compressed_proof(const Digest* proof, size_t proof_len,
                                const Digest leaves[/*np*/],
                                const size_t pos[/*np*/], size_t np) const {

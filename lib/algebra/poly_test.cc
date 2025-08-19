@@ -73,7 +73,7 @@ template <size_t N, size_t W>
 void one_test_extend() {
   using Field = Fp<W>;
   using T2 = Poly<2, Field>;
-  using T = Poly<N, Field>;
+  using FT = Poly<N, Field>;
   using Elt = typename Field::Elt;
   const Field F(primes[W - 1]);
   Bogorng<Field> rng(&F);
@@ -86,7 +86,7 @@ void one_test_extend() {
     L2[0] = rng.next();
     L2[1] = rng.next();
 
-    T L = T::extend(L2, F);
+    FT L = FT::extend(L2, F);
 
     for (size_t iter1 = 0; iter1 < 10; iter1++) {
       auto r = rng.next();

@@ -23,10 +23,12 @@
 #include "circuits/compiler/compiler.h"
 #include "circuits/ecdsa/verify_circuit.h"
 #include "circuits/logic/bit_plucker.h"
+#include "circuits/logic/counter.h"
 #include "circuits/logic/routing.h"
 #include "circuits/mdoc/mdoc_1f_io.h"
 #include "circuits/mdoc/mdoc_constants.h"
 #include "circuits/sha/flatsha256_circuit.h"
+#include "util/panic.h"
 namespace proofs {
 
 template <class LogicCircuit, class Field, class EC, size_t kNumAttr>
@@ -40,7 +42,6 @@ class mdoc_1f {
   using v8 = typename LogicCircuit::v8;
   using v32 = typename LogicCircuit::v32;
   using v256 = typename LogicCircuit::v256;
-  using vind = typename LogicCircuit::template bitvec<kMdoc1CborIndexBits>;
   using Flatsha =
       FlatSHA256Circuit<LogicCircuit,
                         BitPlucker<LogicCircuit, kMdoc1SHAPluckerBits>>;
@@ -48,6 +49,7 @@ class mdoc_1f {
   using ShaBlockWitness = typename Flatsha::BlockWitness;
   using sha_packed_v32 = typename Flatsha::packed_v32;
   using Cbor = Cbor<LogicCircuit, kMdoc1CborIndexBits>;
+  using vind = typename Cbor::vindex;
 
   const LogicCircuit& lc_;
   const EC& ec_;
@@ -118,6 +120,8 @@ class mdoc_1f {
     }
 
     void input(QuadCircuit<Field>& Q, const LogicCircuit& lc) {
+      const Counter<LogicCircuit> CTRC(lc);
+
       e_ = Q.input();
       dpkx_ = Q.input();
       dpky_ = Q.input();
@@ -144,7 +148,7 @@ class mdoc_1f {
         pwcb_[i].encoded_sel_header = Q.input();
       }
       gwcb_.invprod_decode = Q.input();
-      gwcb_.cc0 = Q.input();
+      gwcb_.cc0_counter = CTRC.input();
       gwcb_.invprod_parse = Q.input();
 
       valid_.input(lc);
@@ -254,10 +258,10 @@ class mdoc_1f {
                            psC.data());
     cbor_.assert_negative_at(kMdoc1MaxMsoLen, vw.dev_key_pkx_.k, 1, dsC.data());
     cbor_.assert_negative_at(kMdoc1MaxMsoLen, vw.dev_key_pky_.k, 2, dsC.data());
-    cbor_.assert_elt_as_be_bytes_at(kMdoc1MaxMsoLen, vw.dev_key_pkx_.v, 32,
-                                    vw.dpkx_, dsC.data());
-    cbor_.assert_elt_as_be_bytes_at(kMdoc1MaxMsoLen, vw.dev_key_pky_.v, 32,
-                                    vw.dpky_, dsC.data());
+    assert_elt_as_be_bytes_at(kMdoc1MaxMsoLen, vw.dev_key_pkx_.v, 32, vw.dpkx_,
+                              dsC.data());
+    assert_elt_as_be_bytes_at(kMdoc1MaxMsoLen, vw.dev_key_pky_.v, 32, vw.dpky_,
+                              dsC.data());
     // Attributes parsing
     PathEntry ak[2] = {{vw.value_digests_, kValueDigestsLen, kValueDigestsID},
                        {vw.org_, kOrgLen, kOrgID}};
@@ -270,13 +274,13 @@ class mdoc_1f {
       sha_.assert_message(2, two, vw.attrb_[ai].data(),
                           vw.attr_sha_[ai].data());
 
-      EltW h = repack32(vw.attr_sha_[ai][1].h1);
       // Check the hash matches the value in the signed MSO.
       cbor_.assert_map_entry(kMdoc1MaxMsoLen, vw.org_.v, 2, vw.attr_mso_[ai].k,
                              vw.attr_mso_[ai].v, vw.attr_mso_[ai].ndx,
                              dsC.data(), psC.data());
-      cbor_.assert_elt_as_be_bytes_at(kMdoc1MaxMsoLen, vw.attr_mso_[ai].v, 32,
-                                      h, dsC.data());
+      EltW h = repack32(vw.attr_sha_[ai][1].h1);
+      assert_elt_as_be_bytes_at(kMdoc1MaxMsoLen, vw.attr_mso_[ai].v, 32, h,
+                                dsC.data());
 
       // Check that the attribute_id and value occur in the hashed text.
       r_.shift(vw.attr_ei_[ai].offset, 96, B, 128, vw.attrb_[ai].data(), zz, 3);
@@ -285,6 +289,9 @@ class mdoc_1f {
   }
 
  private:
+  // TODO [matteof 2025-08-01] packing a SHA256 hash into an
+  // EltW loses some soundness, and there is no reason to do it.
+  // Get rid of repack32() and compare the individual bits/bytes.
   EltW repack32(const sha_packed_v32 H[]) const {
     EltW h = lc_.konst(0);
     Elt twok = lc_.one();
@@ -347,6 +354,42 @@ class mdoc_1f {
                            dsC.data());
       start = p[i].ind.v;
     }
+  }
+
+  void assert_elt_as_be_bytes_at(size_t n, const vind& j, size_t len, EltW X,
+                                 const typename Cbor::decode ds[/*n*/]) const {
+    const LogicCircuit& LC = lc_;  // shorthand
+
+    std::vector<EltW> A(n);
+    for (size_t i = 0; i < n; ++i) {
+      A[i] = ds[i].as_scalar;
+    }
+    EltW tx = LC.konst(0), k256 = LC.konst(256);
+
+    std::vector<EltW> B(2 + len);
+    size_t unroll = 3;
+    size_t si = 1;
+    r_.shift(j, len + 2, B.data(), n, A.data(), LC.konst(0), unroll);
+    if (len < 24) {
+      size_t expected_header = (2 << 5) + len;
+      auto eh = LC.konst(expected_header);
+      LC.assert_eq(&B[0], eh);
+    } else if (len < 256) {
+      size_t expected_header = (2 << 5) + 24;
+      auto eh = LC.konst(expected_header);
+      LC.assert_eq(&B[0], eh);
+      LC.assert_eq(&B[1], LC.konst(len));
+      si = 2;
+    } else {
+      check(false, "len >= 256");
+    }
+
+    for (size_t i = 0; i < len; ++i) {
+      auto tmp = LC.mul(&tx, k256);
+      tx = LC.add(&tmp, B[i + si]);
+    }
+
+    LC.assert_eq(&tx, X);
   }
 
   Flatsha sha_;

@@ -26,11 +26,23 @@
 #include "circuits/logic/bit_plucker.h"
 #include "circuits/logic/routing.h"
 #include "circuits/sha/flatsha256_circuit.h"
+#include "util/panic.h"
 
 namespace proofs {
 
-template <class LogicCircuit, class Field, class EC>
+// This class implements a circuit to verify a restricted JWT+KB2 token.
+// The restrictions are:
+//  - The token must be in the format of header.payload.signature~kb
+//  - The device key is included in the payload as:
+//    "cnf":{"jwk":{"kty":"EC","crv":"P-256","x":"...","y":"..."}
+//  - None of the attribute identifiers include the characters
+//     {colon,quote,solidus}.
+//  - All of the attributes are encoded as strings.
+// These restrictions follow from our reasoning for why substring comparison
+// suffices in place of parsing.
+template <class LogicCircuit, class Field, class EC, size_t SHABlocks>
 class JWT {
+  constexpr static size_t kMaxSHABlocks = SHABlocks;
   using EltW = typename LogicCircuit::EltW;
   using BitW = typename LogicCircuit::BitW;
   using Nat = typename Field::N;
@@ -47,41 +59,44 @@ class JWT {
 
  public:
   struct OpenedAttribute {
-    v8 attr[32]; /* 32b representing attribute name in be. */
-    v8 v1[64];   /* 64b of attribute value */
+    v8 pattern[128];
+    v8 len;
+    void input(const LogicCircuit& lc) {
+      for (size_t i = 0; i < 128; ++i) {
+        pattern[i] = lc.template vinput<8>();
+      }
+      len = lc.template vinput<8>();
+    }
   };
 
   class Witness {
    public:
-    EltW r_, s_, e_;
-    EcdsaWitness jwt_sig_;
-    v8 preimage_[64 * kMaxJWTSHABlocks];
+    EltW e_, dpkx_, dpky_;
+    EcdsaWitness jwt_sig_, kb_sig_;
+    v8 preimage_[64 * kMaxSHABlocks];
     v256 e_bits_;
-    ShaBlockWitness sha_[kMaxJWTSHABlocks];
+    ShaBlockWitness sha_[kMaxSHABlocks];
     v8 nb_; /* index of sha block that contains the real hash  */
     std::vector<vind> attr_ind_;
-    std::vector<v8> attr_id_len_;
-    std::vector<v8> attr_value_len_;
     vind payload_ind_, payload_len_;
 
     void input(QuadCircuit<Field>& Q, const LogicCircuit& lc, size_t na) {
-      r_ = Q.input();
-      s_ = Q.input();
       e_ = Q.input();
+      dpkx_ = Q.input();
+      dpky_ = Q.input();
       jwt_sig_.input(Q);
-      for (size_t i = 0; i < 64 * kMaxJWTSHABlocks; ++i) {
+      kb_sig_.input(Q);
+      for (size_t i = 0; i < 64 * kMaxSHABlocks; ++i) {
         preimage_[i] = lc.template vinput<8>();
       }
       e_bits_ = lc.template vinput<256>();
-      for (size_t j = 0; j < kMaxJWTSHABlocks; ++j) {
+      for (size_t j = 0; j < kMaxSHABlocks; ++j) {
         sha_[j].input(Q);
       }
       nb_ = lc.template vinput<8>();
 
       for (size_t j = 0; j < na; ++j) {
         attr_ind_.push_back(lc.template vinput<kJWTIndexBits>());
-        attr_id_len_.push_back(lc.template vinput<8>());
-        attr_value_len_.push_back(lc.template vinput<8>());
       }
       payload_ind_ = lc.template vinput<kJWTIndexBits>();
       payload_len_ = lc.template vinput<kJWTIndexBits>();
@@ -89,7 +104,10 @@ class JWT {
   };
 
   explicit JWT(const LogicCircuit& lc, const EC& ec, const Nat& order)
-      : lc_(lc), ec_(ec), order_(order), sha_(lc), r_(lc) {}
+      : lc_(lc), ec_(ec), order_(order), sha_(lc), r_(lc) {
+    check(1 << kJWTIndexBits > kMaxSHABlocks * 64 - 9,
+          "JWT index bits too small");
+      }
 
   //  The assert_jwt_attributes circuit verifies the following claims:
   //    1. There exists a hash digest e and a signature (r,s) on e
@@ -104,13 +122,15 @@ class JWT {
   // the JWT. The issuer cannot add spaces, cannot escape quotes in the body,
   // and the character : should only appear as a separator.
   void assert_jwt_attributes(EltW pkX, EltW pkY,
+                             EltW e2 /* hash of kb message */,
                              OpenedAttribute oa[/* NUM_ATTR */],
                              Witness& vw) const {
     Ecdsa ecc(lc_, ec_, order_);
 
     ecc.verify_signature3(pkX, pkY, vw.e_, vw.jwt_sig_);
+    ecc.verify_signature3(vw.dpkx_, vw.dpky_, e2, vw.kb_sig_);
 
-    sha_.assert_message_hash(kMaxJWTSHABlocks, vw.nb_, vw.preimage_, vw.e_bits_,
+    sha_.assert_message_hash(kMaxSHABlocks, vw.nb_, vw.preimage_, vw.e_bits_,
                              vw.sha_);
     lc_.vassert_is_bit(vw.e_bits_);
 
@@ -125,45 +145,28 @@ class JWT {
 
     // Assert the attribute equality
     const v8 zz = lc_.template vbit<8>(0);  // cannot appear in strings
-    std::vector<v8> shift_buf(64 * kMaxJWTSHABlocks);
+    std::vector<v8> shift_buf(64 * kMaxSHABlocks);
 
     // First shift the payload into the shift_buf.
-    r_.shift(vw.payload_ind_, 64 * (kMaxJWTSHABlocks - 2), shift_buf.data(),
-             64 * kMaxJWTSHABlocks, vw.preimage_, zz, 3);
+    r_.shift(vw.payload_ind_, 64 * (kMaxSHABlocks - 2), shift_buf.data(),
+             64 * kMaxSHABlocks, vw.preimage_, zz, 3);
 
     // Decode the entire payload. A possible improvement is to decode just
     // the portion necessary.
-    std::vector<v8> dec_buf(64 * kMaxJWTSHABlocks);
+    std::vector<v8> dec_buf(64 * kMaxSHABlocks);
     Base64Decoder<LogicCircuit> b64(lc_);
     b64.base64_rawurl_decode_len(shift_buf.data(), dec_buf.data(),
-                                 64 * (kMaxJWTSHABlocks - 2), vw.payload_len_);
+                                 64 * (kMaxSHABlocks - 2), vw.payload_len_);
 
     // For each attribute, shift the decoded payload so that the
     // attribute is at the beginning of B. Verify the attribute id, the
     // json separator, the attribute value, and the end quote.
     for (size_t i = 0; i < vw.attr_ind_.size(); ++i) {
-      v8 B[32 + 3 + 64 + 1];
+      v8 B[128];
 
       // Check that values of the attribute_id.
-      r_.shift(vw.attr_ind_[i], 100, B, dec_buf.size(), dec_buf.data(), zz, 3);
-      assert_string_eq(32, vw.attr_id_len_[i], B, oa[i].attr);
-
-      r_.shift(vw.attr_id_len_[i], 100, B, 100, B, zz, 3);
-      uint8_t sep[3] = {'"', ':', '"'};
-      for (size_t j = 0; j < 3; ++j) {
-        auto want_j = lc_.template vbit<8>(sep[j]);
-        lc_.vassert_eq(&B[j], want_j);
-      }
-
-      auto three = lc_.template vbit<2>(3);
-      r_.shift(three, 100, B, 100, B, zz, 3);
-
-      assert_string_eq(64, vw.attr_value_len_[i], B, oa[i].v1);
-
-      r_.shift(vw.attr_value_len_[i], 100, B, 100, B, zz, 3);
-
-      auto end_quote = lc_.template vbit<8>('"');
-      lc_.vassert_eq(&B[0], end_quote);
+      r_.shift(vw.attr_ind_[i], 128, B, dec_buf.size(), dec_buf.data(), zz, 3);
+      assert_string_eq(128, oa[i].len, B, oa[i].pattern);
     }
   }
 
