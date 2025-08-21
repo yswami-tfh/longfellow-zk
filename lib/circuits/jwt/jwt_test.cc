@@ -537,10 +537,22 @@ void BM_JwtZKProver(benchmark::State& state) {
   }
 }
 
-BENCHMARK(BM_JwtZKProver<7>);
-BENCHMARK(BM_JwtZKProver<9>);
-BENCHMARK(BM_JwtZKProver<11>);
-BENCHMARK(BM_JwtZKProver<13>);
+// Debian 11 does not support template usage in benchmarks.
+void BM_JwtZKProver7(benchmark::State& state) {
+  BM_JwtZKProver<7>(state);
+}
+
+void BM_JwtZKProver11(benchmark::State& state) {
+  BM_JwtZKProver<11>(state);
+}
+
+void BM_JwtZKProver15(benchmark::State& state) {
+  BM_JwtZKProver<15>(state);
+}
+
+BENCHMARK(BM_JwtZKProver7);
+BENCHMARK(BM_JwtZKProver11);
+BENCHMARK(BM_JwtZKProver15);
 
 }  // namespace
 }  // namespace proofs
