@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PRIVACY_PROOFS_ZK_LIB_CIRCUITS_JWT_JWT_CONSTANTS_H_
-#define PRIVACY_PROOFS_ZK_LIB_CIRCUITS_JWT_JWT_CONSTANTS_H_
+#ifndef PRIVACY_PROOFS_ZK_LIB_CIRCUITS_MDOC_MDOC_DECOMPRESS_H_
+#define PRIVACY_PROOFS_ZK_LIB_CIRCUITS_MDOC_MDOC_DECOMPRESS_H_
 
 #include <cstddef>
+#include <cstdint>
+#include <vector>
+
 namespace proofs {
-
-static constexpr size_t kSHAJWTPluckerBits = 4u;
-static constexpr size_t kJWTIndexBits = 10; /* #bits to index into payload */
-
+extern size_t decompress(std::vector<uint8_t>& bytes, const uint8_t* compressed,
+                         size_t compressed_len);
 }  // namespace proofs
 
-#endif  // PRIVACY_PROOFS_ZK_LIB_CIRCUITS_JWT_JWT_CONSTANTS_H_
+#endif  // PRIVACY_PROOFS_ZK_LIB_CIRCUITS_MDOC_MDOC_DECOMPRESS_H_

@@ -32,13 +32,14 @@ namespace {
 
 using Field = GF2_128<4>;
 using Elt = Field::Elt;
+using CElt = Field::CElt;
 const Field F;
 
 /* Reference GF(2^128) implementation */
 struct ref_gf2_128 {
   uint64_t l;
   uint64_t h;
-  bool operator==(const ref_gf2_128 &y) const { return l == y.l && h == y.h; }
+  bool operator==(const ref_gf2_128& y) const { return l == y.l && h == y.h; }
 };
 
 ref_gf2_128 ref_gf2_128_xor(ref_gf2_128 a, ref_gf2_128 b) {
@@ -73,7 +74,7 @@ static ref_gf2_128 refmul(ref_gf2_128 x, ref_gf2_128 y) {
   return a;
 }
 
-static Elt of_ref(const ref_gf2_128 &ref) {
+static Elt of_ref(const ref_gf2_128& ref) {
   std::array<uint64_t, 2> u{ref.l, ref.h};
   return F.of_scalar_field(u);
 }
@@ -199,7 +200,7 @@ TEST(GF2_128, EvalLagrange) {
 template <size_t N>
 void one_test_extend() {
   using T2 = Poly<2, Field>;
-  using T = Poly<N, Field>;
+  using FT = Poly<N, Field>;
   Bogorng<Field> rng(&F);
 
   // Test the linear extension.  Start with a polynomial
@@ -210,7 +211,7 @@ void one_test_extend() {
     L2[0] = rng.next();
     L2[1] = rng.next();
 
-    T L = T::extend(L2, F);
+    FT L = FT::extend(L2, F);
 
     for (size_t iter1 = 0; iter1 < 10; iter1++) {
       Elt r = rng.next();
@@ -299,6 +300,44 @@ TEST(GF2_128, SubFieldSize) {
             [&](const Elt& x, const Elt& y) { return elt_less_than(x, y, F); });
   for (uint64_t i = 0; i + 1 < n; ++i) {
     EXPECT_NE(scalars[i], scalars[i + 1]);
+  }
+}
+
+TEST(GF2_128, Counter) {
+  size_t n = (1u << F.kSubFieldBits) - 1u;
+
+  // test that all counters are distinct
+  std::vector<CElt> counters(n);
+
+  for (uint64_t i = 0; i < n; ++i) {
+    CElt ctr = F.as_counter(i);
+    Elt e = F.znz_indicator(ctr);
+    counters[i] = ctr;
+
+    if (i == 0) {
+      EXPECT_EQ(e, F.zero());
+      EXPECT_EQ(ctr.e, F.one());
+    } else {
+      EXPECT_NE(e, F.zero());
+      EXPECT_NE(ctr.e, F.one());
+    }
+    if (i == 1) {
+      EXPECT_EQ(ctr.e, F.g());
+    } else {
+      EXPECT_NE(ctr.e, F.g());
+    }
+    if (i == n - 1) {
+      EXPECT_EQ(ctr.e, F.invg());
+    } else {
+      EXPECT_NE(ctr.e, F.invg());
+    }
+  }
+  std::sort(
+      counters.begin(), counters.end(),
+      [&](const CElt& x, const CElt& y) { return elt_less_than(x.e, y.e, F); });
+
+  for (uint64_t i = 0; i + 1 < n; ++i) {
+    EXPECT_NE(counters[i], counters[i + 1]);
   }
 }
 

@@ -29,6 +29,7 @@ template <class Field>
 class CborWitness {
  public:
   using Elt = typename Field::Elt;
+  using CElt = typename Field::CElt;
   static constexpr size_t kNCounters = CborConstants::kNCounters;
   static constexpr size_t kIndexBits = CborConstants::kIndexBits;
   using counters = std::array<size_t, kNCounters>;
@@ -46,7 +47,7 @@ class CborWitness {
 
   struct global_witness {
     Elt invprod_decode;
-    Elt cc0;  // initial values of counter[0]
+    CElt cc0_counter;
     Elt invprod_parse;
   };
 
@@ -118,7 +119,7 @@ class CborWitness {
         }
 
         if (!header) {
-          F.mul(prod_decode, F.of_scalar(slen - 1));
+          F.mul(prod_decode, F.znz_indicator(F.as_counter(slen - 1)));
         }
 
         // set up parse witness
@@ -126,7 +127,7 @@ class CborWitness {
         for (size_t l = kNCounters; l-- > 0;) {
           if (cc[l] != 0) {
             if (i > 0) {
-              F.mul(prod_parse, F.of_scalar(cc[l]));
+              F.mul(prod_parse, F.znz_indicator(F.as_counter(cc[l])));
             }
             isel = l;
             break;
@@ -139,7 +140,7 @@ class CborWitness {
                            &overflow);
         proofs::check(!overflow, "!overflow");
         if (i == 0) {
-          gw.cc0 = F.of_scalar(cc[0]);
+          gw.cc0_counter = F.as_counter(cc[0]);
         }
         pw[i].cc_debug = cc;
 

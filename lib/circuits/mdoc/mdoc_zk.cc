@@ -27,17 +27,9 @@
 #include "algebra/fp2.h"
 #include "algebra/reed_solomon.h"
 #include "arrays/dense.h"
-#include "circuits/compiler/circuit_dump.h"
-#include "circuits/compiler/circuit_id.h"
-#include "circuits/compiler/compiler.h"
-#include "circuits/logic/bit_plucker.h"
-#include "circuits/logic/compiler_backend.h"
-#include "circuits/logic/logic.h"
-#include "circuits/mac/mac_circuit.h"
 #include "circuits/mac/mac_reference.h"
 #include "circuits/mac/mac_witness.h"
-#include "circuits/mdoc/mdoc_hash.h"
-#include "circuits/mdoc/mdoc_signature.h"
+#include "circuits/mdoc/mdoc_decompress.h"
 #include "circuits/mdoc/mdoc_witness.h"
 #include "ec/p256.h"
 #include "gf2k/gf2_128.h"
@@ -46,7 +38,6 @@
 #include "random/secure_random_engine.h"
 #include "random/transcript.h"
 #include "sumcheck/circuit.h"
-#include "util/crypto.h"
 #include "util/log.h"
 #include "util/panic.h"
 #include "util/readbuffer.h"
@@ -98,11 +89,6 @@ static constexpr char kRootY[] =
     "317040948518153410669569855215889129699039744181079354462206130544166376"
     "41043";
 
-// An upper-bound on the decompressed circuit size. It is better to make this
-// bound tight to avoid memory failure in the resource restricted Android
-// gmscore environment.
-static constexpr size_t kCircuitSizeMax = 150000000;
-
 // Magic constant 4 is derived from the circuit layout.
 // It represents the location of the signature MAC wire in the signature
 // verification circuit and must be updated if the public interface of the sig
@@ -112,6 +98,21 @@ static constexpr size_t kCircuitSizeMax = 150000000;
 // the prover can then compute the MAC and finally place it into the correct
 // part of the dense witness array.
 static constexpr size_t kSigMacIndex = 4;
+
+// Flags that indicate whether the prover and/or verifier ought
+// to check the circuit id stored in the circuit itself.
+//
+// In this particular application the ID's of the individual circuits
+// are trusted, and we don't want to incur the performance cost
+// of verifying the ID for every proof or verification.
+//
+// The larger application is expected to contain a hardcoded
+// list of supported circuit IDs.  After downloading the circuit
+// (or compiling it locally) the application is expected to
+// check the ID once, and then store the checked circuit in
+// trusted local storage.
+static constexpr bool enforce_circuit_id_in_prover = false;
+static constexpr bool enforce_circuit_id_in_verifier = false;
 
 // =========== Helper methods for the main exported C functions.
 
@@ -294,21 +295,6 @@ void update_macs(Dense<Fp256Base> &W_sig, Dense<f_128> &W_hash, size_t si,
   update_mac_in_dense(W_sig, W_hash, si, hi, av, Fs);
 }
 
-// Decompress a circuit representation into a vector that has been reserved
-// with size len.  The value len needs to be a good upper-bound estimate on
-// the size of the uncompressed string.
-size_t decompress(std::vector<uint8_t> &bytes, size_t len,
-                  const uint8_t *compressed, size_t compressed_len) {
-  size_t res =
-      ZSTD_decompress(bytes.data(), bytes.size(), compressed, compressed_len);
-
-  if (ZSTD_isError(res)) {
-    log(ERROR, "zlib.UncompressAtMost failed: %s", ZSTD_getErrorName(res));
-    return 0;
-  }
-  return res;
-}
-
 bool parsePk(const char *pkx, const char *pky, Elt &pkX, Elt &pkY) {
   auto maybe_x = p256_base.of_untrusted_string(pkx);
   auto maybe_y = p256_base.of_untrusted_string(pky);
@@ -326,152 +312,6 @@ extern "C" {
 API version that uses 2 circuits over different fields.
 */
 using MdocSWw = MdocSignatureWitness<P256, Fp256Scalar>;
-
-CircuitGenerationErrorCode generate_circuit(const ZkSpecStruct *zk_spec,
-                                            uint8_t **cb, size_t *clen) {
-  if (zk_spec == nullptr) {
-    return CIRCUIT_GENERATION_NULL_INPUT;
-  }
-
-  // Generator only supports the latest version of the ZKSpec for a number of
-  // attributes. Return an error if the requested version is not the latest.
-  int max_circuit_version = 0;
-  for (const ZkSpecStruct &spec : kZkSpecs) {
-    if (spec.num_attributes == zk_spec->num_attributes &&
-        spec.version > max_circuit_version) {
-      max_circuit_version = spec.version;
-    }
-  }
-
-  if (zk_spec->version != max_circuit_version) {
-    return CIRCUIT_GENERATION_INVALID_ZK_SPEC_VERSION;
-  }
-
-  if (cb == nullptr || clen == nullptr) {
-    log(INFO, "cb or clen is null");
-    return CIRCUIT_GENERATION_NULL_INPUT;
-  }
-
-  size_t number_of_attributes = zk_spec->num_attributes;
-
-  std::vector<uint8_t> bytes;
-
-  // ======== serialize signature circuit =========================
-  {
-    using CompilerBackend = CompilerBackend<Fp256Base>;
-    using LogicCircuit = Logic<Fp256Base, CompilerBackend>;
-    using EltW = LogicCircuit::EltW;
-    using MACTag = LogicCircuit::v128;
-    using MdocSignature = MdocSignature<LogicCircuit, Fp256Base, P256>;
-    QuadCircuit<Fp256Base> Q(p256_base);
-    const CompilerBackend cbk(&Q);
-    const LogicCircuit lc(&cbk, p256_base);
-    MdocSignature mdoc_s(lc, p256, n256_order);
-
-    EltW pkX = Q.input(), pkY = Q.input(), htr = Q.input();
-    MACTag mac[7]; /* 3 macs + av */
-    for (size_t i = 0; i < 7; ++i) {
-      mac[i] = lc.vinput<128>();
-    }
-    Q.private_input();
-
-    // Allocate this large object on heap.
-    auto w = std::make_unique<MdocSignature::Witness>();
-    w->input(Q, lc);
-    mdoc_s.assert_signatures(pkX, pkY, htr, &mac[0], &mac[2], &mac[4], mac[6],
-                             *w);
-
-    auto circ = Q.mkcircuit(/*nc=*/1);
-    dump_info("sig", Q);
-    CircuitRep<Fp256Base> cr(p256_base, P256_ID);
-    cr.to_bytes(*circ, bytes);
-    uint8_t id[kSHA256DigestSize];
-    char buf[100];
-    circuit_id<Fp256Base>(id, *circ, p256_base);
-    hex_to_str(buf, id, kSHA256DigestSize);
-    log(INFO, "sig bytes: %zu id:%s", bytes.size(), buf);
-  }
-  {
-    const f_128 Fs;
-
-    using CompilerBackend = CompilerBackend<f_128>;
-    using LogicCircuit = Logic<f_128, CompilerBackend>;
-    using v8 = LogicCircuit::v8;
-    using v256 = LogicCircuit::v256;
-    using MdocHash = MdocHash<LogicCircuit, f_128>;
-    using MacBitPlucker = BitPlucker<LogicCircuit, kMACPluckerBits>;
-    using MAC = MACGF2<CompilerBackend, MacBitPlucker>;
-    using MACWitness = typename MAC::Witness;
-    using MACTag = MAC::v128;
-
-    QuadCircuit<f_128> Q(Fs);
-    const CompilerBackend cbk(&Q);
-    const LogicCircuit lc(&cbk, Fs);
-    MAC mac_check(lc);
-
-    std::vector<MdocHash::OpenedAttribute> oa(number_of_attributes);
-    MdocHash mdoc_h(lc);
-    for (size_t ai = 0; ai < number_of_attributes; ++ai) {
-      oa[ai].input(lc);
-    }
-    v8 now[20];
-    for (size_t i = 0; i < 20; ++i) {
-      now[i] = lc.template vinput<8>();
-    }
-
-    MACTag mac[7]; /* 3 macs + av */
-    for (size_t i = 0; i < 7; ++i) {
-      mac[i] = Q.input();
-    }
-
-    Q.private_input();
-    v256 e = lc.template vinput<256>();
-    v256 dpkx = lc.template vinput<256>();
-    v256 dpky = lc.template vinput<256>();
-
-    // Allocate this large object on heap.
-    auto w = std::make_unique<MdocHash::Witness>(number_of_attributes);
-    w->input(Q, lc);
-
-    Q.begin_full_field();
-    MACWitness macw[3]; /* MACs for e, dpkx, dpky */
-    for (size_t i = 0; i < 3; ++i) {
-      macw[i].input(lc, Q);
-    }
-
-    mdoc_h.assert_valid_hash_mdoc(oa.data(), now, e, dpkx, dpky, *w);
-
-    MACTag a_v = mac[6];
-    mac_check.verify_mac(&mac[0], a_v, e, macw[0]);
-    mac_check.verify_mac(&mac[2], a_v, dpkx, macw[1]);
-    mac_check.verify_mac(&mac[4], a_v, dpky, macw[2]);
-
-    auto circ = Q.mkcircuit(/*nc=*/1);
-    dump_info("hash", Q);
-    CircuitRep<f_128> cr(Fs, GF2_128_ID);
-    cr.to_bytes(*circ, bytes);
-    uint8_t id[kSHA256DigestSize];
-    char buf[100];
-    circuit_id<f_128>(id, *circ, Fs);
-    hex_to_str(buf, id, kSHA256DigestSize);
-    log(INFO, "hash bytes:%zu id:%s", bytes.size(), buf);
-  }
-
-  size_t sz = bytes.size();
-  size_t buf_size = sz / 3 + 1;
-
-  uint8_t *src = bytes.data();
-  // Use an aggressive, apriori estimate on the compressed size to avoid
-  // wasting memory.
-  uint8_t *buf = (uint8_t *)malloc(buf_size);
-
-  size_t zl = ZSTD_compress(buf, buf_size, src, sz, 16);
-  log(INFO, "zstd from %zu --> %zu", sz, zl);
-  *clen = zl;
-  *cb = buf;
-
-  return CIRCUIT_GENERATION_SUCCESS;
-}
 
 // Main endpoint for producing a ZK proof for mdoc properties.
 // This implementation uses 2 separate circuits over 2 fields to verify
@@ -503,7 +343,7 @@ MdocProverErrorCode run_mdoc_prover(
 
   size_t len = kCircuitSizeMax;
   std::vector<uint8_t> bytes(len);
-  size_t full_size = decompress(bytes, len, bcp, bcsz);
+  size_t full_size = decompress(bytes, bcp, bcsz);
 
   if (full_size == 0) {
     return MDOC_PROVER_CIRCUIT_PARSING_FAILURE;
@@ -513,13 +353,13 @@ MdocProverErrorCode run_mdoc_prover(
   ReadBuffer rb_circuit(bytes.data(), full_size);
 
   CircuitRep<Fp256Base> cr_s(p256_base, P256_ID);
-  auto c_sig = cr_s.from_bytes(rb_circuit);
+  auto c_sig = cr_s.from_bytes(rb_circuit, enforce_circuit_id_in_prover);
   if (c_sig == nullptr) {
     log(ERROR, "signature circuit could not be parsed");
     return MDOC_PROVER_CIRCUIT_PARSING_FAILURE;
   }
   CircuitRep<f_128> cr_h(Fs, GF2_128_ID);
-  auto c_hash = cr_h.from_bytes(rb_circuit);
+  auto c_hash = cr_h.from_bytes(rb_circuit, enforce_circuit_id_in_prover);
 
   if (c_hash == nullptr) {
     log(ERROR, "hash circuit could not be parsed");
@@ -641,7 +481,7 @@ MdocVerifierErrorCode run_mdoc_verifier(
   // Parse circuits from cached byte representation.
   size_t len = kCircuitSizeMax;
   std::vector<uint8_t> bytes(len);
-  size_t full_size = decompress(bytes, len, bcp, bcsz);
+  size_t full_size = decompress(bytes, bcp, bcsz);
 
   // For now, we are not using the ZKSpec version anywhere and assuming no
   // backwards compatibility. As soon as we have a use case for it, we have to
@@ -650,14 +490,14 @@ MdocVerifierErrorCode run_mdoc_verifier(
 
   ReadBuffer rb_circuit(bytes.data(), full_size);
   CircuitRep<Fp256Base> cr_s(p256_base, P256_ID);
-  auto c_sig = cr_s.from_bytes(rb_circuit);
+  auto c_sig = cr_s.from_bytes(rb_circuit, enforce_circuit_id_in_verifier);
   if (c_sig == nullptr) {
     log(ERROR, "signature circuit could not be parsed");
     return MDOC_VERIFIER_CIRCUIT_PARSING_FAILURE;
   }
 
   CircuitRep<f_128> cr_h(Fs, GF2_128_ID);
-  auto c_hash = cr_h.from_bytes(rb_circuit);
+  auto c_hash = cr_h.from_bytes(rb_circuit, enforce_circuit_id_in_verifier);
 
   if (c_hash == nullptr) {
     log(ERROR, "circuit could not be parsed");
@@ -740,49 +580,6 @@ MdocVerifierErrorCode run_mdoc_verifier(
   bool ok2 = sig_v.verify(pr_sig, pub_sig, tv);
 
   return ok && ok2 ? MDOC_VERIFIER_SUCCESS : MDOC_VERIFIER_GENERAL_FAILURE;
-}
-
-int circuit_id(uint8_t id[/*kSHA256DigestSize*/], const uint8_t *bcp,
-               size_t bcsz, const ZkSpecStruct *zk_spec) {
-  if (id == nullptr || bcp == nullptr || zk_spec == nullptr) {
-    return 0;
-  }
-  SHA256 sha;
-  uint8_t cid[kSHA256DigestSize];
-
-  size_t len = kCircuitSizeMax;
-  std::vector<uint8_t> bytes(len);
-  size_t full_size = decompress(bytes, len, bcp, bcsz);
-
-  ReadBuffer rb_circuit(bytes.data(), full_size);
-  CircuitRep<Fp256Base> cr_s(p256_base, P256_ID);
-  auto c_sig = cr_s.from_bytes(rb_circuit);
-  if (c_sig == nullptr) {
-    log(ERROR, "signature circuit could not be parsed");
-    return 0;
-  }
-  circuit_id(cid, *c_sig, p256_base);
-  sha.Update(cid, kSHA256DigestSize);
-
-  const f_128 Fs;
-  CircuitRep<f_128> cr_h(Fs, GF2_128_ID);
-  auto c_hash = cr_h.from_bytes(rb_circuit);
-  if (c_hash == nullptr) {
-    log(ERROR, "circuit could not be parsed");
-    return 0;
-  }
-
-  size_t remaining = rb_circuit.remaining();
-  if (remaining != 0) {
-    log(ERROR, "circuit bytes contains extra data: %zu bytes", remaining);
-    return 0;
-  }
-
-  circuit_id(cid, *c_hash, Fs);
-  sha.Update(cid, kSHA256DigestSize);
-
-  sha.DigestData(id);
-  return 1;
 }
 
 } /* extern "C" */

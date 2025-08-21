@@ -159,6 +159,27 @@ void of_scalar(const Field& F) {
     want = F.addf(F.of_scalar(i + 47), F.mulf(base, want));
   }
   EXPECT_EQ(F.of_scalar_field(n), want);
+
+  // check the identity
+  //   of_scalar(sum_i b[i] 2^i) = sum_i b[i] beta(i)
+
+  // small integers k = sum_i b[i] 2^i
+  for (uint64_t k = 0; k < 1000; ++k) {
+    auto sum = F.zero();
+    for (size_t i = 0; i < 64; ++i) {
+      uint64_t bit = (k >> i) & 1;
+      if (bit) {
+        F.add(sum, F.beta(i));
+      }
+    }
+    EXPECT_EQ(F.of_scalar(k), sum);
+  }
+
+  // powers of two
+  for (size_t i = 0; i < 64; ++i) {
+    uint64_t k = static_cast<uint64_t>(1) << i;
+    EXPECT_EQ(F.of_scalar(k), F.beta(i));
+  }
 }
 
 // test add/sub around the -1..0 boundary in raw (not montgomery)

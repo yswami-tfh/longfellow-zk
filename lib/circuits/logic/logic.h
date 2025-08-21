@@ -171,6 +171,18 @@ class Logic {
     return r;
   }
 
+  // compute in the circuit what F.of_scalar(sum_i v[i] 2^i) would compute
+  // outside the circuit
+  template <size_t N>
+  EltW as_scalar(const bitvec<N>& v) const {
+    EltW r = konst(zero());
+    for (size_t i = 0; i < N; ++i) {
+      auto vi = eval(v[i]);
+      r = axpy(&r, f_.beta(i), vi);
+    }
+    return r;
+  }
+
   // return an EltW which is 0 iff v is 0
   EltW assert0(const BitW& v) const {
     auto e = eval(v);
@@ -500,11 +512,11 @@ class Logic {
         ab01[i] = lxor3(&ab01[i], &a0b0[i], a1b1[i]);
       }
 
-      for (size_t i = 0; i < w/2; ++i) {
+      for (size_t i = 0; i < w / 2; ++i) {
         c[i] = a0b0[i];
-        c[i + w/2] = lxor(&a0b0[i + w/2], ab01[i]);
-        c[i + w] = lxor(&ab01[i + w/2], a1b1[i]);
-        c[i + 3*w/2] = a1b1[i + w/2];
+        c[i + w / 2] = lxor(&a0b0[i + w / 2], ab01[i]);
+        c[i + w] = lxor(&ab01[i + w / 2], a1b1[i]);
+        c[i + 3 * w / 2] = a1b1[i + w / 2];
       }
     }
   }
@@ -970,6 +982,7 @@ class Logic {
   // bk_->{input,output}.  Because C++ templates are lazily expanded,
   // this class compiles even with backends that do not support I/O,
   // as long as you don't expand vinput(), voutput().
+  EltW eltw_input() const { return bk_->input(); }
   BitW input() const { return BitW(bk_->input(), f_); }
   void output(const BitW& x, size_t i) const { bk_->output(eval(x), i); }
   size_t wire_id(const BitW& v) const { return bk_->wire_id(v.x); }
@@ -1069,7 +1082,6 @@ class Logic {
   BitW lxor_aux(const BitW& a, const BitW& b, BinaryFieldTypeTag tt) const {
     return addv(a, b);
   }
-
 
   size_t pack(uint64_t mask, size_t n, BitW a[/*n*/]) const {
     size_t j = 0;

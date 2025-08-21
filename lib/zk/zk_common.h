@@ -43,6 +43,7 @@ class ZkCommon {
   using Elt = typename Field::Elt;
   using CPoly = typename LayerProof<Field>::CPoly;
   using WPoly = typename LayerProof<Field>::WPoly;
+  using FWPoly = typename LayerProof<Field>::FWPoly;
 
  public:
   // pi: witness index for first pad element in a larger commitment
@@ -66,7 +67,7 @@ class ZkCommon {
 
     size_t ci = 0;  // Index of the next Ligero constraint.
 
-    const typename WPoly::dot_interpolation dot_wpoly(F);
+    const typename FWPoly::dot_interpolation dot_wpoly(F);
 
     // no copies in this version.
     check(circuit.logc == 0, "assuming that copies=1");
@@ -93,7 +94,7 @@ class ZkCommon {
           size_t r = 2 * round + hand;
           const WPoly& hp = plr->hp[hand][round];
           challenge->hb[hand][round] = tss.round(hp);
-          const WPoly lag = dot_wpoly.coef(challenge->hb[hand][round], F);
+          const FWPoly lag = dot_wpoly.coef(challenge->hb[hand][round], F);
 
           cb.next(r, &lag[0], hp.t_);
           // now cb contains a symbolic representation of claim_{r}

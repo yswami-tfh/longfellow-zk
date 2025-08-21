@@ -24,7 +24,7 @@
 #include "circuits/cbor_parser/cbor_constants.h"
 #include "circuits/cbor_parser/cbor_pluck.h"
 #include "circuits/cbor_parser/scan.h"
-#include "circuits/logic/bit_adder.h"
+#include "circuits/logic/counter.h"
 #include "circuits/logic/memcmp.h"
 #include "circuits/logic/routing.h"
 #include "util/panic.h"
@@ -33,8 +33,10 @@ namespace proofs {
 template <class Logic, size_t IndexBits = CborConstants::kIndexBits>
 class Cbor {
  public:
+  using CounterL = Counter<Logic>;
   using Field = typename Logic::Field;
   using EltW = typename Logic::EltW;
+  using CEltW = typename CounterL::CEltW;
   using BitW = typename Logic::BitW;
   using v8 = typename Logic::v8;
   static constexpr size_t kIndexBits = IndexBits;
@@ -45,15 +47,11 @@ class Cbor {
   // (byte) array.
   using vindex = typename Logic::template bitvec<kIndexBits>;
 
-  // does not yet work in binary fields
-  static_assert(!Field::kCharacteristicTwo);
-
-  explicit Cbor(const Logic& l)
-      : l_(l), ba_count_(l), ba_byte_(l), ba_index_(l), bp_(l) {}
+  explicit Cbor(const Logic& l) : l_(l), ctr_(l), bp_(l) {}
 
   struct global_witness {
     EltW invprod_decode;  // inverse of a certain product, see assert_decode()
-    EltW cc0;             // initial value of counter[0]
+    CEltW cc0_counter;    // initial value of counter[0]
     EltW invprod_parse;   // inverse of a certain product, see assert_parse()
   };
 
@@ -78,9 +76,10 @@ class Cbor {
     BitW length_plus_next_v8;
     BitW count_is_next_v8;
     BitW header;
-    EltW length;  // of this item
-    EltW as_field_element;
-    EltW count_as_field_element;
+    CEltW length;  // of this item
+    EltW as_scalar;
+    CEltW as_counter;
+    CEltW count_as_counter;
     v8 as_bits;
   };
 
@@ -123,21 +122,21 @@ class Cbor {
     auto bad_count = L.lor_exclusive(&s.count24, s.count0_23);
     s.invalid = L.lor(&lhs, L.lnot(bad_count));
 
-    s.count_as_field_element = ba_count_.as_field_element(count);
+    s.count_as_counter = ctr_.as_counter(count);
 
     // Length is the length of the item, including the header.
     //
     //    1          for header
     //   +1          if (count24)
     //   +count      if (stringp && count0_23);
-    s.length = L.konst(1);
-    s.length = L.add(&s.length, L.eval(s.count24));
-    auto str_23 = L.land(&s.stringp, s.count0_23);
-    auto e_str_23 = L.eval(str_23);
-    auto adjust_if_string = L.mul(&e_str_23, s.count_as_field_element);
-    s.length = L.add(&s.length, adjust_if_string);
+    s.length = ctr_.as_counter(1);
+    s.length = ctr_.add(&s.length, ctr_.as_counter(s.count24));
+    BitW str_23 = L.land(&s.stringp, s.count0_23);
+    CEltW adjust_if_string = ctr_.ite0(&str_23, s.count_as_counter);
+    s.length = ctr_.add(&s.length, adjust_if_string);
 
-    s.as_field_element = ba_byte_.as_field_element(v);
+    s.as_counter = ctr_.as_counter(v);
+    s.as_scalar = L.as_scalar(v);
     s.as_bits = v;
 
     s.header = L.bit(0);  // for now
@@ -148,7 +147,7 @@ class Cbor {
                      const position_witness pw[/*n*/],
                      const global_witness& gw) const {
     const Logic& L = l_;  // shorthand
-    Scan<Logic> SC(l_);
+    Scan<CounterL> SC(ctr_);
 
     // -------------------------------------------------------------
     // Decoder didn't fail
@@ -167,19 +166,19 @@ class Cbor {
     // Headers are where they are supposed to be.
     // First, compute the segmented scan
     //   slen[i] = header[i] ? length[i] : (slen[i-1] + mone[i])
-    std::vector<EltW> mone(n);
+    std::vector<CEltW> mone(n);
     std::vector<BitW> header(n);
-    std::vector<EltW> length(n);
-    std::vector<EltW> slen_next(n);
+    std::vector<CEltW> length(n);
+    std::vector<CEltW> slen_next(n);
 
     for (size_t i = 0; i + 1 < n; ++i) {
-      mone[i] = L.konst(L.mone());
+      mone[i] = ctr_.mone();
       header[i] = ds[i].header;
       length[i] = ds[i].length;
       if (i + 1 < n) {
-        auto len_i =
-            L.lmul(&ds[i].length_plus_next_v8, ds[i + 1].as_field_element);
-        length[i] = L.add(&length[i], len_i);
+        CEltW len_i =
+            ctr_.ite0(&ds[i].length_plus_next_v8, ds[i + 1].as_counter);
+        length[i] = ctr_.add(&length[i], len_i);
       }
     }
 
@@ -192,13 +191,16 @@ class Cbor {
     }
 
     {
-      auto one = L.konst(1);
+      EltW one = L.konst(L.one());
+      CEltW mone_counter = ctr_.mone();
+
       // "\A I : (SLEN_NEXT[I] == 1)  IFF  HEADER[I+1]"
       {
         // "\A I : HEADER[I+1] => (SLEN_NEXT[I] == 1)"
         for (size_t i = 0; i + 1 < n; ++i) {
-          auto implies = L.lmul(&header[i + 1], L.sub(&slen_next[i], one));
-          L.assert0(implies);
+          CEltW implies =
+              ctr_.ite0(&header[i + 1], ctr_.add(&slen_next[i], mone_counter));
+          ctr_.assert0(implies);
         }
       }
       {
@@ -208,7 +210,8 @@ class Cbor {
         //   PROD_{I, L} HEADER[I+1] ? 1 : (SLEN_NEXT[I] - 1)
         //
         auto f = [&](size_t i) {
-          return L.mux(&header[i + 1], &one, L.sub(&slen_next[i], one));
+          CEltW snm1 = ctr_.add(&slen_next[i], mone_counter);
+          return L.mux(&header[i + 1], &one, ctr_.znz_indicator(snm1));
         };
         EltW prod = L.mul(0, n - 1, f);
         auto want_one = L.mul(&prod, gw.invprod_decode);
@@ -220,7 +223,7 @@ class Cbor {
   //------------------------------------------------------------
   // Parser
   //------------------------------------------------------------
-  using counters = std::array<EltW, kNCounters>;
+  using counters = std::array<CEltW, kNCounters>;
   struct parse_output {
     bv_counters sel;
     counters c;
@@ -228,24 +231,24 @@ class Cbor {
 
   void parse(size_t n, parse_output ps[/*n*/], const decode ds[/*n*/],
              const position_witness pw[/*n*/], const global_witness& gw) const {
-    std::vector<EltW> ddss(n);
+    std::vector<CEltW> ddss(n);
     std::vector<BitW> SS(n);
-    std::vector<EltW> AA(n);
-    std::vector<EltW> BB(n);
+    std::vector<CEltW> AA(n);
+    std::vector<CEltW> BB(n);
 
     const Logic& L = l_;  // shorthand
-    Scan<Logic> SC(l_);
+    Scan<CounterL> SC(ctr_);
 
     for (size_t i = 0; i < n; ++i) {
       ps[i].sel = bp_.pluckj(pw[i].encoded_sel_header);
     }
 
-    auto mone = L.konst(L.mone());
+    CEltW mone = ctr_.mone();
     for (size_t l = 0; l < kNCounters; ++l) {
       for (size_t i = 0; i < n; ++i) {
         // at the selected headers, decrement the level-L counter.
         auto dp = L.land(&ds[i].header, ps[i].sel[l]);
-        ddss[i] = L.lmul(&dp, mone);
+        ddss[i] = ctr_.ite0(&dp, mone);
       }
 
       if (l == 0) {
@@ -255,7 +258,7 @@ class Cbor {
         // after initializing SS and AA as follows:
         //
         //   SS[0] = L.bit(1);
-        //   AA[0] = gw.cc0;
+        //   AA[0] = gw.cc0_counter;
         //   for (size_t i = 1; i < n; ++i) {
         //     SS[i] = L.bit(0);
         //     AA[i] = L.konst(0);
@@ -268,7 +271,7 @@ class Cbor {
         //
         // Note that AA, SS are uninitialized here.  They will be initialized
         // below for the next level.
-        ddss[0] = gw.cc0;
+        ddss[0] = gw.cc0_counter;
         SC.add(n, BB.data(), ddss.data());
       } else {
         SC.add(n, BB.data(), SS.data(), AA.data(), ddss.data());
@@ -281,14 +284,14 @@ class Cbor {
 
       // prepare SS, AA for the next level
       for (size_t i = 0; i < n; ++i) {
-        EltW newc = L.eval(ds[i].tagp);
-        EltW count = ds[i].count_as_field_element;
+        CEltW newc = ctr_.as_counter(ds[i].tagp);
+        CEltW count = ds[i].count_as_counter;
         if (i + 1 < n) {
-          count = L.mux(&ds[i].count_is_next_v8, &ds[i + 1].as_field_element,
-                        count);
+          count =
+              ctr_.mux(&ds[i].count_is_next_v8, &ds[i + 1].as_counter, count);
         }
-        newc = L.add(&newc, L.lmul(&ds[i].itemsp, count));
-        newc = L.add(&newc, L.lmul(&ds[i].mapp, count));
+        newc = ctr_.add(&newc, ctr_.ite0(&ds[i].itemsp, count));
+        newc = ctr_.add(&newc, ctr_.ite0(&ds[i].mapp, count));
         AA[i] = newc;
 
         auto sel = L.land(&ps[i].sel[l], ds[i].header);
@@ -311,16 +314,24 @@ class Cbor {
 
     for (size_t i = 0; i < n; ++i) {
       // "The SEL witnesses are mutually exclusive."
-      // Verify by asserting that they are all bits
-      // and that their sum (in the field) is a bit.
-      auto sum = L.bit(0);
+      // The bit plucker guarantees that the SEL witnesses
+      // are bits, but in principle one could feed an
+      // out-of-domain input to the bit plucker that
+      // sets more than one bit.
+      // Another way to accomplish the same effect would
+      // be to range-check the input to the bit plucker.
       for (size_t l = 0; l < kNCounters; ++l) {
-        L.assert_is_bit(ps[i].sel[l]);
-        sum = L.lor_exclusive(&sum, ps[i].sel[l]);
+        for (size_t m = l + 1; m < kNCounters; ++m) {
+          L.assert0(L.land(&ps[i].sel[l], ps[i].sel[m]));
+        }
       }
-      L.assert_is_bit(sum);
 
       // "at a header, at least one SEL bit is set"
+      auto sum = L.bit(0);
+      for (size_t l = 0; l < kNCounters; ++l) {
+        // known to be exclusive by the test above
+        sum = L.lor_exclusive(&sum, ps[i].sel[l]);
+      }
       L.assert_implies(&ds[i].header, sum);
     }
 
@@ -328,7 +339,7 @@ class Cbor {
     // COUNTER[I][L] is the state of the parser at the end
     // of position I, so COUNTER[N-1][L] is the final state.
     for (size_t l = 0; l < kNCounters; ++l) {
-      L.assert0(ps[n - 1].c[l]);
+      ctr_.assert0(ps[n - 1].c[l]);
     }
 
     // SEL[0][0] is set.  We implicitly define COUNTER[-1][L] to make
@@ -344,7 +355,7 @@ class Cbor {
       BitW b = ps[i + 1].sel[0];
       for (size_t l = 1; l < kNCounters; ++l) {
         // b => COUNTER[i][l] == 0
-        L.assert0(L.lmul(&b, ps[i].c[l]));
+        ctr_.assert0(ctr_.ite0(&b, ps[i].c[l]));
         b = L.lor(&b, ps[i + 1].sel[l]);
       }
     }
@@ -354,11 +365,11 @@ class Cbor {
     //
     //    PROD_{I, L} SEL[I+1][L] ? COUNTER[I][L] : 1
     std::vector<EltW> prod(kNCounters);
-
     auto one = L.konst(1);
     for (size_t l = 0; l < kNCounters; ++l) {
       auto f = [&](size_t i) {
-        return L.mux(&ps[i + 1].sel[l], &ps[i].c[l], one);
+        EltW cc = ctr_.znz_indicator(ps[i].c[l]);
+        return L.mux(&ps[i + 1].sel[l], &cc, one);
       };
       prod[l] = L.mul(0, n - 1, f);
     }
@@ -384,7 +395,7 @@ class Cbor {
 
     std::vector<EltW> A(n);
     for (size_t i = 0; i < n; ++i) {
-      A[i] = ds[i].as_field_element;
+      A[i] = ds[i].as_scalar;
     }
 
     // shift len+1 bytes, including the header.
@@ -499,54 +510,13 @@ class Cbor {
 
     std::vector<EltW> A(n);
     for (size_t i = 0; i < n; ++i) {
-      A[i] = ds[i].as_field_element;
+      A[i] = ds[i].as_scalar;
     }
 
     EltW B[1];
     size_t unroll = 3;
     R.shift(j, 1, B, n, A.data(), L.konst(256), unroll);
     L.assert_eq(&B[0], expected);
-  }
-
-  //------------------------------------------------------------
-  // "J is a header beginning a byte array of length LEN that
-  // is the big-endian representation of EltW X."
-  // ------------------------------------------------------------
-  void assert_elt_as_be_bytes_at(size_t n, const vindex& j, size_t len, EltW X,
-                                 const decode ds[/*n*/]) const {
-    const Logic& L = l_;  // shorthand
-    const Routing<Logic> R(L);
-
-    std::vector<EltW> A(n);
-    for (size_t i = 0; i < n; ++i) {
-      A[i] = ds[i].as_field_element;
-    }
-    EltW tx = L.konst(0), k256 = L.konst(256);
-
-    std::vector<EltW> B(2 + len);
-    size_t unroll = 3;
-    size_t si = 1;
-    R.shift(j, len + 2, B.data(), n, A.data(), L.konst(0), unroll);
-    if (len < 24) {
-      size_t expected_header = (2 << 5) + len;
-      auto eh = L.konst(expected_header);
-      L.assert_eq(&B[0], eh);
-    } else if (len < 256) {
-      size_t expected_header = (2 << 5) + 24;
-      auto eh = L.konst(expected_header);
-      L.assert_eq(&B[0], eh);
-      L.assert_eq(&B[1], L.konst(len));
-      si = 2;
-    } else {
-      check(false, "len >= 256");
-    }
-
-    for (size_t i = 0; i < len; ++i) {
-      auto tmp = L.mul(&tx, k256);
-      tx = L.add(&tmp, B[i + si]);
-    }
-
-    L.assert_eq(&tx, X);
   }
 
   //------------------------------------------------------------
@@ -596,37 +566,40 @@ class Cbor {
     assert_header(n, v, ds);
 
     for (size_t l = 0; l < kNCounters; ++l) {
+      // Hack: temporarily treat CEltW as EltW so as to reuse
+      // the shifter.
       std::vector<EltW> A(n);
       for (size_t i = 0; i < n; ++i) {
-        A[i] = ps[i].c[l];
+        A[i] = ps[i].c[l].e;
       }
 
       // Select counters[m], counters[k], and counters[v].
-      EltW cm, ck, cv;
+      CEltW cm, ck, cv;
 
       const size_t unroll = 3;
-      R.shift(m, 1, &cm, n, A.data(), L.konst(0), unroll);
-      R.shift(k, 1, &ck, n, A.data(), L.konst(0), unroll);
-      R.shift(v, 1, &cv, n, A.data(), L.konst(0), unroll);
+      R.shift(m, 1, &cm.e, n, A.data(), L.konst(0), unroll);
+      R.shift(k, 1, &ck.e, n, A.data(), L.konst(0), unroll);
+      R.shift(v, 1, &cv.e, n, A.data(), L.konst(0), unroll);
 
       if (l <= level) {
         // Counters[L] must agree at the key, value, and root
         // of the map.
-        L.assert_eq(&cm, ck);
-        L.assert_eq(&cm, cv);
+        ctr_.assert_eq(&cm, ck);
+        ctr_.assert_eq(&cm, cv);
       } else if (l == level + 1) {
-        auto one = L.konst(1);
-        auto two = L.konst(2);
+        CEltW one = ctr_.as_counter(1);
+        CEltW two = ctr_.as_counter(2);
         // LEVEL+1 counters must have the right number of decrements.
         // Specifically, if the counter at the map is N, then the j-th
         // key has N-(2*j+1) and the j-th value has N-(2*j+2)
-        auto twoj = L.mul(&two, ba_index_.as_field_element(j));
-        L.assert_eq(&cm, L.add(&ck, L.add(&twoj, one)));
-        L.assert_eq(&cm, L.add(&cv, L.add(&twoj, two)));
+        CEltW jctr = ctr_.as_counter(j);
+        CEltW twoj = ctr_.add(&jctr, jctr);
+        ctr_.assert_eq(&cm, ctr_.add(&ck, ctr_.add(&twoj, one)));
+        ctr_.assert_eq(&cm, ctr_.add(&cv, ctr_.add(&twoj, two)));
       } else {
         // not sure if this is necessary, but all other counters
         // of CM are supposed to be zero.
-        L.assert0(cm);
+        ctr_.assert0(cm);
       }
     }
   }
@@ -646,7 +619,7 @@ class Cbor {
     L.vassert_eq(tot, n);
 
     for (size_t i = 0; i < n; ++i) {
-      L.assert0(L.lmul(&ds[i].as_field_element, L.vlt(i, jroot)));
+      L.assert0(L.lmul(&ds[i].as_scalar, L.vlt(i, jroot)));
     }
   }
 
@@ -682,9 +655,7 @@ class Cbor {
 
  private:
   const Logic& l_;
-  const BitAdder<Logic, 5> ba_count_;
-  const BitAdder<Logic, 8> ba_byte_;
-  const BitAdder<Logic, kIndexBits> ba_index_;
+  const CounterL ctr_;
   const CborPlucker<Logic, kNCounters> bp_;
 };
 }  // namespace proofs

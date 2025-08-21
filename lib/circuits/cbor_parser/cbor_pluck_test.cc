@@ -16,26 +16,21 @@
 
 #include <stddef.h>
 
-#include <array>
-
 #include "algebra/fp.h"
 #include "circuits/logic/bit_plucker_constants.h"
 #include "circuits/logic/evaluation_backend.h"
 #include "circuits/logic/logic.h"
+#include "gf2k/gf2_128.h"
 #include "gtest/gtest.h"
 
 namespace proofs {
 namespace {
-using Field = Fp<1>;
-using Elt = Field::Elt;
-const Field F("18446744073709551557");
 
-using EvalBackend = EvaluationBackend<Field>;
-using Logic = Logic<Field, EvalBackend>;
-using BitW = Logic::BitW;
-using EltW = Logic::EltW;
+template <class Field>
+void pluck_test(const Field &F) {
+  using EvalBackend = EvaluationBackend<Field>;
+  using Logic = Logic<Field, EvalBackend>;
 
-TEST(CborPluck, Pluck) {
   constexpr size_t NJ = 7;
   constexpr size_t N = 2 * (NJ + 1);
   const EvalBackend ebk(F);
@@ -51,5 +46,10 @@ TEST(CborPluck, Pluck) {
     }
   }
 }
+
+TEST(CborPluck, PluckPrimeField) { pluck_test(Fp<1>("18446744073709551557")); }
+
+TEST(CborPluck, PluckBinaryField) { pluck_test(GF2_128<>()); }
+
 }  // namespace
 }  // namespace proofs
