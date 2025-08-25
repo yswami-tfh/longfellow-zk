@@ -78,9 +78,6 @@ using gf2k = f_128::Elt;
 
 using RSFactory = LCH14ReedSolomonFactory<f_128>;
 
-constexpr size_t kLigeroRate = 4;
-constexpr size_t kLigeroNreq = 128;  // 86+ bits statistical security
-
 // Root of unity for the f_p256^2 extension field.
 static constexpr char kRootX[] =
     "112649224146410281873500457609690258373018840430489408729223714171582664"
@@ -306,6 +303,17 @@ bool parsePk(const char *pkx, const char *pky, Elt &pkX, Elt &pkY) {
   return true;
 }
 
+bool sameNamespace(const RequestedAttribute attrs[/*n*/], size_t n) {
+  for (size_t i = 1; i < n; ++i) {
+    if (attrs[i].namespace_len != attrs[0].namespace_len ||
+        memcmp(attrs[i].namespace_id, attrs[0].namespace_id,
+               attrs[0].namespace_len) != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // =========== End of helper functions =====================
 extern "C" {
 /*
@@ -337,6 +345,11 @@ MdocProverErrorCode run_mdoc_prover(
     return MDOC_PROVER_INVALID_INPUT;
   }
 
+  if (!sameNamespace(attrs, attrs_len)) {
+    log(ERROR, "attributes must all be in the same namespace");
+    return MDOC_PROVER_INVALID_INPUT;
+  }
+
   // Parse circuits from cached byte representation.
   const f2_p256 p256_2(p256_base);
   const f_128 Fs;
@@ -365,7 +378,8 @@ MdocProverErrorCode run_mdoc_prover(
     log(ERROR, "hash circuit could not be parsed");
     return MDOC_PROVER_HASH_PARSING_FAILURE;
   }
-  log(INFO, "circuit created");
+  log(INFO, "circuit created. h[in:%zu q:%zu], s[in:%zu q:%zu]",
+      c_hash->ninputs, c_hash->nl, c_sig->ninputs, c_sig->nl);
 
   //  ============ Produce zk witness ==============
   auto W_sig = Dense<Fp256Base>(1, c_sig->ninputs);
@@ -392,8 +406,10 @@ MdocProverErrorCode run_mdoc_prover(
   const RSFactory_b rsf_b(fft_b, p256_base);
   const RSFactory the_reed_solomon_factory(Fs);
 
-  ZkProof<f_128> h_zk(*c_hash, kLigeroRate, kLigeroNreq);
-  ZkProof<Fp256Base> sig_zk(*c_sig, kLigeroRate, kLigeroNreq);
+  ZkProof<f_128> h_zk(*c_hash, kLigeroRate, kLigeroNreq,
+                      zk_spec->block_enc_hash);
+  ZkProof<Fp256Base> sig_zk(*c_sig, kLigeroRate, kLigeroNreq,
+                            zk_spec->block_enc_sig);
 
   ZkProver<f_128, RSFactory> hash_p(*c_hash, Fs, the_reed_solomon_factory);
   ZkProver<Fp256Base, RSFactory_b> sig_p(*c_sig, p256_base, rsf_b);
@@ -402,10 +418,10 @@ MdocProverErrorCode run_mdoc_prover(
   sig_p.commit(sig_zk, W_sig, tp, rng);
 
   log(INFO,
-      "commit created. h[nl:%zu], s[nl:%zu] hc[b:%zu r:%zu] "
+      "commit created. h[nl:%zu, ni:%zu], s[nl:%zu, ni:%zu] hc[b:%zu r:%zu] "
       "sc[b:%zu r:%zu]",
-      c_hash->nl, c_sig->nl, h_zk.param.block, h_zk.param.nrow,
-      sig_zk.param.block, sig_zk.param.nrow);
+      c_hash->nl, c_hash->ninputs, c_sig->nl, c_sig->ninputs, h_zk.param.block,
+      h_zk.param.nrow, sig_zk.param.block, sig_zk.param.nrow);
 
   // After prover has committed to the public inputs, compute
   // verifier challenge av, and then compute MACs of the common public
@@ -469,6 +485,11 @@ MdocVerifierErrorCode run_mdoc_verifier(
     return MDOC_VERIFIER_INVALID_INPUT;
   }
 
+  if (!sameNamespace(attrs, attrs_len)) {
+    log(ERROR, "attributes must all be in the same namespace");
+    return MDOC_VERIFIER_INVALID_INPUT;
+  }
+
   const f_128 Fs;
 
   // Sanity check input sizes.
@@ -507,8 +528,17 @@ MdocVerifierErrorCode run_mdoc_verifier(
       c_sig->ninputs);
 
   // Parse proofs
-  ZkProof<f_128> pr_hash(*c_hash, kLigeroRate, kLigeroNreq);
-  ZkProof<Fp256Base> pr_sig(*c_sig, kLigeroRate, kLigeroNreq);
+  ZkProof<f_128> pr_hash(*c_hash, kLigeroRate, kLigeroNreq,
+                         zk_spec->block_enc_hash);
+  ZkProof<Fp256Base> pr_sig(*c_sig, kLigeroRate, kLigeroNreq,
+                            zk_spec->block_enc_sig);
+
+  log(INFO,
+      "proof params: h[nl:%zu, ni:%zu], s[nl:%zu, ni:%zu] hc[b:%zu r:%zu] "
+      "sc[b:%zu r:%zu]",
+      c_hash->nl, c_hash->ninputs, c_sig->nl, c_sig->ninputs,
+      pr_hash.param.block, pr_hash.param.nrow, pr_sig.param.block,
+      pr_sig.param.nrow);
 
   const std::vector<uint8_t> zbuf(zkproof, zkproof + proof_len);
   ReadBuffer rb(zbuf);
@@ -545,9 +575,11 @@ MdocVerifierErrorCode run_mdoc_verifier(
   const RSFactory the_reed_solomon_factory(Fs);
 
   ZkVerifier<f_128, RSFactory> hash_v(*c_hash, the_reed_solomon_factory,
-                                      kLigeroRate, kLigeroNreq, Fs);
+                                      kLigeroRate, kLigeroNreq,
+                                      zk_spec->block_enc_hash, Fs);
   ZkVerifier<Fp256Base, RSFactory_b> sig_v(*c_sig, rsf_b, kLigeroRate,
-                                           kLigeroNreq, p256_base);
+                                           kLigeroNreq, zk_spec->block_enc_sig,
+                                           p256_base);
 
   // Use the transcript from the session to select the random oracle.
   class Transcript tv(transcript, tr_len, zk_spec->version);

@@ -30,6 +30,9 @@ extern "C" {
 // for example age_over_18. The circuit generation can be run once, and the
 // result cached for subsequent use in the prover and verifier.
 
+const size_t kLigeroRate = 4;
+const size_t kLigeroNreq = 128;  // 86+ bits statistical security
+
 /* This struct allows a verifier to express which attribute and value the prover
  * must claim.  The value should be passed as the raw bytes of the CBOR value.
  */
@@ -93,6 +96,8 @@ typedef struct {
   size_t num_attributes;
   // The version of the ZK specification.
   size_t version;
+  // The block_enc parameter for the ZK proof.
+  size_t block_enc_hash, block_enc_sig;
 } ZkSpecStruct;
 
 static const char kDefaultDocType[] = "org.iso.18013.5.1.mDL";
@@ -100,7 +105,7 @@ static const char kDefaultDocType[] = "org.iso.18013.5.1.mDL";
 // An upper-bound on the decompressed circuit size. It is better to make this
 // bound tight to avoid memory failure in the resource restricted Android
 // gmscore environment.
-static constexpr size_t kCircuitSizeMax = 150000000;
+static const size_t kCircuitSizeMax = 150000000;
 
 // The run_mdoc2_prover method takes byte-oriented inputs that describe a
 // circuit, mdoc, the public key of the issuer for the mdoc, a transcript
@@ -155,7 +160,7 @@ CircuitGenerationErrorCode generate_circuit(const ZkSpecStruct* zk_spec_version,
 int circuit_id(uint8_t id[/*kSHA256DigestSize*/], const uint8_t* bcp,
                size_t bcsz, const ZkSpecStruct* zk_spec);
 
-enum { kNumZkSpecs = 8 };
+enum { kNumZkSpecs = 12 };
 // This is a hardcoded list of all the ZK specifications supported by this
 // library. Every time a new breaking change is introduced in either the circuit
 // format or its interpretation, a new version must be added here.

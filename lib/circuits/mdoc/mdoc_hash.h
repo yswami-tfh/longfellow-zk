@@ -196,7 +196,6 @@ class MdocHash {
     r_.shift(vw.value_digests_.k, kValueDigestsLen, cmp_buf.data(), kMaxMsoLen,
              vw.in_ + 5 + 2, zz, /*unroll=*/3);
     assert_bytes_at(13, &cmp_buf[0], kValueDigestsCheck);
-    assert_bytes_at(18, &cmp_buf[14], &kValueDigestsCheck[14]);
 
     // Attributes: Equality of hash with MSO value
     for (size_t ai = 0; ai < vw.num_attr_; ++ai) {
@@ -302,9 +301,7 @@ class MdocHash {
   static constexpr uint8_t kValueDigestsCheck[] = {
       0x6C, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x44, 0x69, 0x67,
       0x65, 0x73, 0x74, 0x73,
-      0xA0,  // either {A1, A2}
-      0x71, 0x6F, 0x72, 0x67, 0x2E, 0x69, 0x73, 0x6F, 0x2E,
-      0x31, 0x38, 0x30, 0x31, 0x33, 0x2E, 0x35, 0x2E, 0x31};
+  };
   static constexpr size_t kValueDigestsLen = sizeof(kValueDigestsCheck);
 
   static constexpr size_t kDateLen = 20;

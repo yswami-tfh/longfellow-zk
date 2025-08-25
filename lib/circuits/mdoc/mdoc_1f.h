@@ -362,7 +362,7 @@ class mdoc_1f {
 
     std::vector<EltW> A(n);
     for (size_t i = 0; i < n; ++i) {
-      A[i] = ds[i].as_scalar;
+      A[i] = ds[i].bd.as_scalar;
     }
     EltW tx = LC.konst(0), k256 = LC.konst(256);
 

@@ -67,6 +67,14 @@ struct ZkProof {
               rate, req),
         com_proof(&param) {}
 
+  explicit ZkProof(const Circuit<Field> &c, size_t rate, size_t req,
+                   size_t block_enc)
+      : c(c),
+        proof(c.nl),
+        param((c.ninputs - c.npub_in) + ZkCommon<Field>::pad_size(c), c.nl,
+              rate, req, block_enc),
+        com_proof(&param) {}
+
   // Maximum size of the proof in bytes. The actual size will be smaller
   // because the Merkle proof is batched.
   size_t size() const {

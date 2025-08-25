@@ -117,6 +117,7 @@ TEST_F(MdocZKTest, one_claim) {
       {"+18-mdoc[0]", {test::age_over_18}, &mdoc_tests[0]},
       {"+18-mdoc[1]", {test::age_over_18}, &mdoc_tests[1]},
       {"+18-mdoc[2]", {test::age_over_18}, &mdoc_tests[2]},
+      {"+18-mdoc[9]", {test::europa_age_over_18}, &mdoc_tests[9]},
       {"familyname_mustermann-mdoc[3]",
        {test::familyname_mustermann},
        &mdoc_tests[3]},
@@ -358,6 +359,21 @@ TEST_F(MdocZKTest, bad_arguments) {
                       (uint8_t **)&zkproof, &proof_len, &zk_spec_1),
       MDOC_PROVER_CIRCUIT_PARSING_FAILURE);
 
+  // Invalid attributes, two different namespaces.
+    RequestedAttribute attrs2[2] = {
+      test::age_over_18,
+      test::aamva_name_suffix_mr
+  };
+
+  EXPECT_EQ(run_mdoc_prover(circuit, sizeof(circuit), mdoc, sizeof(mdoc), pk,
+                            pk, tr, sizeof(tr), attrs2, 2, now,
+                            (uint8_t **)&zkproof, &proof_len, &zk_spec_1),
+            MDOC_PROVER_INVALID_INPUT);
+  EXPECT_EQ(run_mdoc_verifier(circuit1_, circuit_len1_, pk, pk, tr, sizeof(tr),
+                              attrs2, 2, now, zkproof, 100,
+                              kDefaultDocType, &zk_spec_1),
+            MDOC_VERIFIER_INVALID_INPUT);
+
   // Basic verifier tests that pass in a null ptr.
   // Broken circuit.
   EXPECT_EQ(run_mdoc_verifier(nullptr, sizeof(circuit), pk, pk, tr, sizeof(tr),
@@ -425,7 +441,9 @@ TEST_F(MdocZKTest, bad_arguments) {
   uint8_t id[32];
   EXPECT_EQ(circuit_id(nullptr, circuit1_, circuit_len1_, &zk_spec_1), 0);
   EXPECT_EQ(circuit_id(id, nullptr, 0, &zk_spec_1), 0);
-  EXPECT_EQ(circuit_id(id, circuit1_, circuit_len1_, nullptr), 0);
+  EXPECT_EQ(
+      circuit_id(id, circuit1_, circuit_len1_, (const ZkSpecStruct*)nullptr),
+      0);
   EXPECT_EQ(circuit_id(id, circuit1_, 10, &zk_spec_1), 0);
   EXPECT_EQ(circuit_id(id, circuit1_, circuit_len1_ - 8, &zk_spec_1), 0);
 }
@@ -507,6 +525,7 @@ TEST(CircuitGenerationTest, attempt_to_generate_old_circuit) {
             CIRCUIT_GENERATION_INVALID_ZK_SPEC_VERSION);
 }
 
+// ============================ Benchmarks ====================================
 static const Claims benchmark_claim = {
     "benchmark",
     {test::age_over_18},

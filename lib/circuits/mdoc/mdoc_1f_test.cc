@@ -167,7 +167,6 @@ TEST(jwt, EvalJWT) {
   using MW = MDL::Witness;
   using RMW = mdoc_1f_witness<P256, Fp256Base, Fp256Scalar>;
   using v8 = typename Logic<Fp256Base, EvaluationBackend>::v8;
-  using BitW = typename Logic<Fp256Base, EvaluationBackend>::BitW;
 
   const EvaluationBackend ebk(p256_base, true);
   const Logic<Fp256Base, EvaluationBackend> L(&ebk, p256_base);
@@ -187,9 +186,9 @@ TEST(jwt, EvalJWT) {
   std::vector<RequestedAttribute> oa;
   oa.push_back(test::age_over_18);
 
-  uint8_t want[] = {0x6B, 'a', 'g', 'e',  '_', 'o', 'v', 'e', 'r', '_',
-                    '1', '8', 0x6C, 'e', 'l', 'e', 'm', 'e', 'n',
-                    't', 'V', 'a',  'l', 'u', 'e', 0xF5};
+  uint8_t want[] = {0x6B, 'a', 'g', 'e',  '_', 'o', 'v', 'e', 'r',
+                    '_',  '1', '8', 0x6C, 'e', 'l', 'e', 'm', 'e',
+                    'n',  't', 'V', 'a',  'l', 'u', 'e', 0xF5};
   std::vector<MDL::OpenedAttribute> oa2;
   for (size_t i = 0; i < oa.size(); ++i) {
     MDL::OpenedAttribute oa2i;
@@ -296,34 +295,31 @@ TEST(Mdoc1fTest, RunsExamples) {
   // Compile the circuit
   std::unique_ptr<Circuit<Fp256Base>> circuit = make_mdoc1f_circuit(p256_base);
 
-  for (const auto& test : mdoc_tests) {
-    // Check if this example is for 1 attribute (adjust as needed)
-    if (test.mdoc_size > 1400) continue;
+  // Now that small examples that use different namespaces have been added,
+  // change this test to only try the "website explainer" example.
+  const auto& test = mdoc_tests[5];
 
-    log(INFO, "Running example size %zu", test.mdoc_size);
+  log(INFO, "Running example size %zu", test.mdoc_size);
 
-    // 2. Fill Witness (W) and Public Inputs (pub)
-    auto W = Dense<Fp256Base>(1, circuit->ninputs);
-    auto pub = Dense<Fp256Base>(1, circuit->npub_in);
-    fill_input(W, test, p256_base);
-    fill_input(pub, test, p256_base, /*prover=*/false);
+  // 2. Fill Witness (W) and Public Inputs (pub)
+  auto W = Dense<Fp256Base>(1, circuit->ninputs);
+  auto pub = Dense<Fp256Base>(1, circuit->npub_in);
+  fill_input(W, test, p256_base);
+  fill_input(pub, test, p256_base, /*prover=*/false);
 
-    log(INFO, "Fill done");
+  log(INFO, "Fill done");
 
-    // 3. Run ZK Test
-    run2_test_zk(*circuit, W, pub, p256_base,
-                 p256_base.of_string(
-                     "1126492241464102818735004576096902583730188404304894"
-                     "08729223714171582664680802"), /* omega_x*/
-                 p256_base.of_string(
-                     "3170409485181534106695698552158891296990397441810793"
-                     "5446220613054416637641043"), /* omega_y */
-                 1ull << 31);
-  }
+  // 3. Run ZK Test
+  run2_test_zk(
+      *circuit, W, pub, p256_base,
+      p256_base.of_string("1126492241464102818735004576096902583730188404304894"
+                          "08729223714171582664680802"), /* omega_x*/
+      p256_base.of_string("3170409485181534106695698552158891296990397441810793"
+                          "5446220613054416637641043"), /* omega_y */
+      1ull << 31);
 }
 
 // ============ Benchmarks =====================================================
-
 
 void BM_Mdoc1fProver(benchmark::State& state) {
   std::unique_ptr<Circuit<Fp256Base>> CIRCUIT = make_mdoc1f_circuit(p256_base);
