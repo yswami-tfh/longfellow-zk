@@ -53,6 +53,19 @@ class ZkVerifier {
     ZkCommon<Field>::setup_lqc(c, lqc_, n_witness_);
   }
 
+  explicit ZkVerifier(const Circuit<Field>& c, const RSFactory& rsf,
+                      size_t rate, size_t nreq, size_t block_enc,
+                      const Field& F)
+      : circ_(c),
+        n_witness_(c.ninputs - c.npub_in),
+        param_(n_witness_ + ZkCommon<Field>::pad_size(c), c.nl, rate, nreq,
+               block_enc),
+        lqc_(c.nl),
+        rsf_(rsf),
+        f_(F) {
+    ZkCommon<Field>::setup_lqc(c, lqc_, n_witness_);
+  }
+
   void recv_commitment(const ZkProof<Field>& zk, Transcript& t) const {
     log(INFO, "verifier: recv commit");
     LigeroVerifier<Field, RSFactory>::receive_commitment(zk.com, t);

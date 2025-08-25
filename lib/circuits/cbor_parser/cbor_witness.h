@@ -184,19 +184,37 @@ class CborWitness {
     size_t count = b & 0x1Fu;
     bool count0_23 = (count < 24);
     bool count24 = (count == 24);
+    bool count25 = (count == 25);
+    bool count26 = (count == 26);
+    bool count27 = (count == 27);
 
     switch (type) {
       case 0: /* unsigned */
       case 1: /* negative integer */
-      case 4: /* array */
-      case 5: /* map */
       case 6: /* tag */
         if (count0_23) {
           return 1;
         } else if (count24) {
           return 2;
+        } else if (count25) {
+          return 3;
+        } else if (count26) {
+          return 5;
+        } else if (count27) {
+          return 9;
         } else {
           check(false, "unwitnessed count (atom)");
+          return 0;
+        }
+
+      case 4: /* array */
+      case 5: /* map */
+        if (count0_23) {
+          return 1;
+        } else if (count24) {
+          return 2;
+        } else {
+          check(false, "unwitnessed count (item)");
           return 0;
         }
 

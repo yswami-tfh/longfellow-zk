@@ -24,13 +24,23 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "base/init_google.h"
 #include "file/base/path.h"
 #include "circuits/mdoc/mdoc_zk.h"
+#include "util/panic.h"
+#include "util/readbuffer.h"
+#include "zk/zk_common.h"
 #include "third_party/absl/cleanup/cleanup.h"
 #include "third_party/absl/flags/flag.h"
 #include "third_party/absl/flags/parse.h"
+#include "circuits/mdoc/mdoc_decompress.h"
+#include "ec/p256.h"
+#include "gf2k/gf2_128.h"
+#include "ligero/ligero_param.h"
+#include "proto/circuit.h"
+
 
 ABSL_FLAG(std::string, output_dir, "circuits",
           "Output directory for the circuit file");
@@ -44,6 +54,86 @@ std::string BytesToHexString(const uint8_t* bytes, size_t len) {
     ss << std::setw(2) << static_cast<int>(bytes[i]);
   }
   return ss.str();
+}
+
+// Recompute the parameters to find the optimal fine grained block_enc.
+template <class LigeroParam>
+size_t optimize(LigeroParam &lp) {
+  size_t min_proof_size = lp.layout(lp.block_enc);
+  size_t best_block_enc = lp.block_enc;
+  for (size_t e = 100; e <= (1 << 17); e++) {
+    size_t proof_size = lp.layout(e);
+    if (proof_size < min_proof_size) {
+      min_proof_size = proof_size;
+      best_block_enc = e;
+    }
+  }
+  return best_block_enc;
+}
+
+// Decompress and parse the circuit bytes, optimize the Ligero
+// commitment parameters and print a ZkSpecStruct entry.
+void optimize_params(const uint8_t* circuit_bytes, size_t circuit_len,
+                     const std::string& circuit_id_hex,
+                     const ZkSpecStruct* zk_spec) {
+  using f_128 = proofs::GF2_128<>;
+  // Parse circuits.
+  const f_128 Fs;
+
+  size_t len = 1 << 27;
+  std::vector<uint8_t> bytes(len);
+  size_t full_size = proofs::decompress(bytes, circuit_bytes, circuit_len);
+
+  // Ensure that the circuit was decompressed correctly.
+  proofs::check(full_size > 0, "Circuit decompression failed");
+  proofs::ReadBuffer rb_circuit(bytes.data(), full_size);
+
+  proofs::CircuitRep<proofs::Fp256Base> cr_s(proofs::p256_base,
+                                             proofs::P256_ID);
+  auto c_sig = cr_s.from_bytes(rb_circuit, false);
+  proofs::check(c_sig != nullptr, "Signature circuit could not be parsed");
+
+  proofs::CircuitRep<f_128> cr_h(Fs, proofs::GF2_128_ID);
+  auto c_hash = cr_h.from_bytes(rb_circuit, false);
+  proofs::check(c_hash != nullptr, "Hash circuit could not be parsed");
+
+  proofs::LigeroParam<f_128> hp(
+      (c_hash->ninputs - c_hash->npub_in) +
+          proofs::ZkCommon<f_128>::pad_size(*c_hash),
+      c_hash->nl, kLigeroRate, kLigeroNreq);
+
+  size_t min_proof_size = hp.layout(hp.block_enc);
+  std::cout << "  hash legacy parameters: be:" << hp.block_enc
+            << " sz:" << min_proof_size << " r:" << hp.r << " w:" << hp.w
+            << " b:" << hp.block << " nr:" << hp.nrow << " nq:" << hp.nqtriples
+            << std::endl;
+  size_t best_block_enc = optimize(hp);
+  min_proof_size = hp.layout(best_block_enc);
+  std::cout << "  hash   best parameters: be:" << best_block_enc
+            << " sz:" << min_proof_size << std::endl;
+
+  proofs::LigeroParam<proofs::Fp256Base> sp(
+      (c_sig->ninputs - c_sig->npub_in) +
+          proofs::ZkCommon<proofs::Fp256Base>::pad_size(*c_sig),
+      c_sig->nl, kLigeroRate, kLigeroNreq);
+
+  min_proof_size = sp.layout(sp.block_enc);
+
+  std::cout << "   sig legacy parameters: be:" << sp.block_enc
+            << " sz:" << min_proof_size << " r:" << sp.r << " w:" << sp.w
+            << " b:" << sp.block << " nr:" << sp.nrow << " nq:" << sp.nqtriples
+            << std::endl;
+
+  size_t sig_best_block_enc = optimize(sp);
+  min_proof_size = sp.layout(sig_best_block_enc);
+
+  std::cout << "   sig   best parameters: be:" << sig_best_block_enc
+            << " sz:" << min_proof_size << std::endl;
+
+  std::cout << "{" << zk_spec->system << "\"" << circuit_id_hex << "\", "
+            << zk_spec->num_attributes << ", " << zk_spec->version << ", "
+            << best_block_enc << ", " << sig_best_block_enc << "},"
+            << std::endl;
 }
 
 // Helper to find a ZkSpecStruct matching the desired number of attributes.
@@ -144,5 +234,9 @@ int main(int argc, char* argv[]) {
   out_file.close();
   std::cout << "Circuit successfully written to " << output_file_path
             << std::endl;
+
+  // Search for optimal Ligero parameters.
+  std::cout << "Optimizing Ligero parameters..." << std::endl;
+  optimize_params(circuit_bytes, circuit_len, circuit_id_hex, selected_zk_spec);
   return 0;
 }

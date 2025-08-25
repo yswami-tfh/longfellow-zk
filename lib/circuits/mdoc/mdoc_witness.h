@@ -28,6 +28,7 @@
 #include "circuits/ecdsa/verify_witness.h"
 #include "circuits/logic/bit_plucker_encoder.h"
 #include "circuits/mac/mac_witness.h"
+#include "circuits/mdoc/mdoc_attribute_ids.h"
 #include "circuits/mdoc/mdoc_constants.h"
 #include "circuits/mdoc/mdoc_hash.h"
 #include "circuits/mdoc/mdoc_zk.h"
@@ -57,6 +58,8 @@ struct FullAttribute {
   size_t id_len;
   size_t val_ind;
   size_t val_len;
+
+  const uint8_t* mdl_ns;  // mdl namespace for the attribute
 
   // Index for this attribute among all attributes in the mdoc hash list.
   size_t digest_id;
@@ -146,40 +149,42 @@ class ParsedMdoc {
     if (ns == nullptr) return false;
 
     // Find the attribute witness we need from here.
-    // For now, we only support 1 namespace.
-    auto mldns = ns[1].lookup(resp, 17, (uint8_t*)"org.iso.18013.5.1", di);
-    if (mldns == nullptr) return false;
-    size_t ai = 0;
-    auto tattr = mldns[1].index(ai++);
-    while (tattr != nullptr) {
-      CborDoc er;
-      // Decode the map in this tagged attribute.
-      size_t pos = tattr->children_[0].u_.string.pos;
-      size_t end = pos + tattr->children_[0].u_.string.len;
-      if (!er.decode(resp, end, pos, 0)) {
-        return false;
+    for (const char* sn : kSupportedNamespaces) {
+      auto mldns = ns[1].lookup(resp, strlen(sn), (const uint8_t*)sn, di);
+      if (mldns == nullptr) continue;
+      size_t ai = 0;
+      auto tattr = mldns[1].index(ai++);
+      while (tattr != nullptr) {
+        CborDoc er;
+        // Decode the map in this tagged attribute.
+        size_t pos = tattr->children_[0].u_.string.pos;
+        size_t end = pos + tattr->children_[0].u_.string.len;
+        if (!er.decode(resp, end, pos, 0)) {
+          return false;
+        }
+
+        auto ei = er.lookup(resp, 17, (uint8_t*)"elementIdentifier", di);
+        if (ei == nullptr) return false;
+        auto ev = er.lookup(resp, 12, (uint8_t*)"elementValue", di);
+        if (ev == nullptr) return false;
+        auto digid = er.lookup(resp, 8, (uint8_t*)"digestID", di);
+        if (digid == nullptr) return false;
+
+        attributes_.push_back((FullAttribute){
+            ei[1].position(),
+            ei[1].length(),
+            ev[1].position(),
+            ev[1].length(),
+            (const uint8_t*)sn,
+            static_cast<size_t>(digid[1].u_.u64), /* digest_id */
+            {0, 0, 0},                            /* default mso_ind */
+            tattr->header_pos_,                   /* tag_ind */
+            tattr->children_[0].u_.string.len +
+                4, /* +4 for the D8 18 58 <> prefix */
+            resp});
+
+        tattr = mldns[1].index(ai++);
       }
-
-      auto ei = er.lookup(resp, 17, (uint8_t*)"elementIdentifier", di);
-      if (ei == nullptr) return false;
-      auto ev = er.lookup(resp, 12, (uint8_t*)"elementValue", di);
-      if (ev == nullptr) return false;
-      auto digid = er.lookup(resp, 8, (uint8_t*)"digestID", di);
-      if (digid == nullptr) return false;
-
-      attributes_.push_back(
-          (FullAttribute){ei[1].position(),
-                          ei[1].length(),
-                          ev[1].position(),
-                          ev[1].length(),
-                          static_cast<size_t>(digid[1].u_.u64), /* digest_id */
-                          {0, 0, 0},          /* default mso_ind */
-                          tattr->header_pos_, /* tag_ind */
-                          tattr->children_[0].u_.string.len +
-                              4, /* +4 for the D8 18 58 <> prefix */
-                          resp});
-
-      tattr = mldns[1].index(ai++);
     }
 
     auto ds = docs0[0].lookup(resp, 12, (uint8_t*)"deviceSigned", di);
@@ -232,13 +237,21 @@ class ParsedMdoc {
     if (nvd == nullptr) return false;
     copy_kv_header(value_digests_, nvd);
 
+    // For backwards compatibility with 1f circuits, copy the hard-coded org_ if
+    // it is present. TODO(shelat): Remove this once all 1f circuits have
+    // been updated.
     auto norg = nvd[1].lookup(pmso, kOrgLen, kOrgID, org_.ndx);
-    if (norg == nullptr) return false;
-    copy_kv_header(org_, norg);
+    if (norg != nullptr) {
+      copy_kv_header(org_, norg);
+    }
 
     for (auto& attr : attributes_) {
+      size_t index;
+      auto nss = nvd[1].lookup(pmso, strlen((const char*)attr.mdl_ns),
+                               attr.mdl_ns, index);
+      if (nss == nullptr) return false;
       uint64_t hi = (uint64_t)attr.digest_id;
-      auto hattr = norg[1].lookup_unsigned(hi, attr.mso.ndx);
+      auto hattr = nss[1].lookup_unsigned(hi, attr.mso.ndx);
       if (hattr == nullptr) return false;
       copy_kv_header(attr.mso, hattr);
     }

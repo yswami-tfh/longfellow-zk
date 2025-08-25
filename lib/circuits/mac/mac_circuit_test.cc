@@ -43,6 +43,7 @@ namespace {
 // This test subsumes the evaluation test.
 TEST(MAC, full_circuit_test_128) {
   set_log_level(INFO);
+  constexpr size_t kNum = 3;
 
   size_t ninput;
   std::unique_ptr<Circuit<Fp256Base>> circuit;
@@ -57,14 +58,25 @@ TEST(MAC, full_circuit_test_128) {
     using MACCircuit =
         MAC<LogicCircuit, BitPlucker<LogicCircuit, kMACPluckerBits>>;
     MACCircuit mac(LC);
-    MACCircuit::Witness vwc;
 
-    auto msg = Q.input();
-    v128 mv[2] = {LC.vinput<128>(), LC.vinput<128>()};
-    v128 a_v = LC.vinput<128>();
+    MACCircuit::Witness vwc[kNum];
+    LogicCircuit::EltW msg[kNum];
+    v128 mv[kNum][2];
+    v128 a_v[kNum];
+    for (size_t i = 0; i < kNum; ++i) {
+      msg[i] = Q.input();
+      mv[i][0] = LC.vinput<128>();
+      mv[i][1] = LC.vinput<128>();
+      a_v[i] = LC.vinput<128>();
+    }
+
     Q.private_input();
-    vwc.input(LC, Q);
-    mac.verify_mac(msg, mv, a_v, vwc, n256_order);
+    for (size_t i = 0; i < kNum; ++i) {
+      vwc[i].input(LC, Q);
+    }
+    for (size_t i = 0; i < kNum; ++i) {
+      mac.verify_mac(msg[i], mv[i], a_v[i], vwc[i], n256_order);
+    }
 
     circuit = Q.mkcircuit(1);
     dump_info("mac verify p256", Q);
@@ -89,7 +101,6 @@ TEST(MAC, full_circuit_test_128) {
     filler.push_back(p256_base.one());
 
     Fp256Base::Elt msg_elt = p256_base.of_bytes_field(test_msg).value();
-    filler.push_back(msg_elt);
 
     gf2k av, ap[2], mac[2];
     mac_ref.sample(&av, 1, &rng);
@@ -99,13 +110,19 @@ TEST(MAC, full_circuit_test_128) {
     MacWitness<Fp256Base> vw(p256_base, gf);
     vw.compute_witness(ap, test_msg);
 
-    // Fill inputs
-    for (size_t i = 0; i < 2; ++i) {
-      fill_gf2k<GF2_128<>, Fp256Base>(mac[i], filler, p256_base);
-    }
-    fill_gf2k<GF2_128<>, Fp256Base>(av, filler, p256_base);
+    for (size_t i = 0; i < kNum; ++i) {
+      filler.push_back(msg_elt);
 
-    vw.fill_witness(filler);
+      // Fill inputs
+      for (size_t j = 0; j < 2; ++j) {
+        fill_gf2k<GF2_128<>, Fp256Base>(mac[j], filler, p256_base);
+      }
+      fill_gf2k<GF2_128<>, Fp256Base>(av, filler, p256_base);
+    }
+
+    for (size_t i = 0; i < kNum; ++i) {
+      vw.fill_witness(filler);
+    }
 
     log(INFO, "Fill done");
     /*------------------------------------------------------------*/
